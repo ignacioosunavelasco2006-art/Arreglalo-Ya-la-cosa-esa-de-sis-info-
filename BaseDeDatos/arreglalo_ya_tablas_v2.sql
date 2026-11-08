@@ -1,9 +1,25 @@
 -- =====================================================================
---  ARRÉGLALO YA - Script de creación de TABLAS (versión 1)
+--  ARRÉGLALO YA - Script de creación de TABLAS (versión 2)
 --  Basado en el documento oficial (RF-01 a RF-36, RN-01 a RN-19)
 --  Sintaxis compatible con PostgreSQL.
 --  Solo tablas, claves primarias/foráneas y restricciones (CHECK/UNIQUE).
---  Índices, datos de prueba y parámetros iniciales van en la siguiente etapa.
+--  Índices, datos de prueba y parámetros iniciales van en la siguiente etapa
+--  (salvo los índices únicos parciales y la vista que son parte de las reglas de integridad).
+--
+--  Cambios v2: se quita es_urgente; se agregan campos de perfil y presupuesto;
+--  nuevas tablas devoluciones y disponibilidad_trabajador; integridad de trabajos/ofertas;
+--  una sola oferta aceptada por solicitud; precio total calculado; y política de
+--  eliminación lógica de usuarios (se reemplazan ON DELETE CASCADE sobre evidencias).
+-- =====================================================================
+
+-- Necesaria para evitar traslapes de horarios en disponibilidad_trabajador
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+-- =====================================================================
+--  POLÍTICA DE ELIMINACIÓN: los usuarios NO se borran físicamente.
+--  Se desactivan con usuarios.estado = 'eliminada' o 'suspendida' y se conserva
+--  todo el historial (pagos, reclamos, evidencias, auditoría).
+--  Por eso las FK hacia usuarios y hacia registros importantes no usan CASCADE.
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
@@ -32,7 +48,7 @@ CREATE TABLE usuarios (
 
 -- Funciones que tiene activas cada usuario
 CREATE TABLE usuario_roles (
-    id_usuario  INT NOT NULL REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
+    id_usuario  INT NOT NULL REFERENCES usuarios(id_usuario) ON DELETE RESTRICT,
     id_rol      INT NOT NULL REFERENCES roles(id_rol),
     fecha_alta  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id_usuario, id_rol)
@@ -41,7 +57,7 @@ CREATE TABLE usuario_roles (
 -- Datos bancarios (obligatorios para trabajadores). Se guardan cifrados (CU-03)
 CREATE TABLE datos_bancarios (
     id_dato_bancario   INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    id_usuario         INT NOT NULL REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
+    id_usuario         INT NOT NULL REFERENCES usuarios(id_usuario) ON DELETE RESTRICT,  -- con la baja de cuenta, el backend aplica su política de retención
     banco              VARCHAR(80)  NOT NULL,
     titular            VARCHAR(150) NOT NULL,
     numero_cuenta_cif  VARCHAR(255) NOT NULL,        -- valor cifrado por el backend
@@ -71,8 +87,12 @@ CREATE TABLE zonas (
 -- ---------------------------------------------------------------------
 
 CREATE TABLE perfiles_trabajador (
-    id_usuario          INT PRIMARY KEY REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
+    id_usuario          INT PRIMARY KEY REFERENCES usuarios(id_usuario) ON DELETE RESTRICT,
     carnet_identidad    VARCHAR(20) NOT NULL UNIQUE,
+    descripcion         VARCHAR(1000),                 -- presentación del trabajador
+    anios_experiencia   SMALLINT NOT NULL DEFAULT 0
+                        CHECK (anios_experiencia BETWEEN 0 AND 60),
+    foto_perfil         VARCHAR(300),                  -- ruta del archivo de la foto
     estado_verificacion VARCHAR(20) NOT NULL DEFAULT 'pendiente'
                         CHECK (estado_verificacion IN ('pendiente','observado','aprobado','rechazado','suspendido')),
     calificacion_promedio NUMERIC(3,2) NOT NULL DEFAULT 0,
@@ -86,7 +106,7 @@ CREATE TABLE perfiles_trabajador (
 -- Carnet y certificado de antecedentes (archivo guardado en almacenamiento privado)
 CREATE TABLE documentos_trabajador (
     id_documento   INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    id_trabajador  INT NOT NULL REFERENCES perfiles_trabajador(id_usuario) ON DELETE CASCADE,
+    id_trabajador  INT NOT NULL REFERENCES perfiles_trabajador(id_usuario) ON DELETE RESTRICT,  -- evidencia de verificación
     tipo           VARCHAR(30) NOT NULL CHECK (tipo IN ('carnet','antecedentes','otro')),
     ruta_archivo   VARCHAR(300) NOT NULL,
     fecha_subida   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -105,6 +125,27 @@ CREATE TABLE trabajador_zonas (
     id_trabajador  INT NOT NULL REFERENCES perfiles_trabajador(id_usuario) ON DELETE CASCADE,
     id_zona        INT NOT NULL REFERENCES zonas(id_zona),
     PRIMARY KEY (id_trabajador, id_zona)
+);
+
+-- Días y horarios en los que el trabajador puede atender (agenda disponible, RN-11, RN-17).
+-- Es distinta de trabajos.fecha_inicio_prog/fecha_fin_prog, que registran la cita ya contratada.
+CREATE TABLE disponibilidad_trabajador (
+    id_disponibilidad INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id_trabajador     INT NOT NULL REFERENCES perfiles_trabajador(id_usuario) ON DELETE CASCADE,
+    dia_semana        SMALLINT NOT NULL CHECK (dia_semana BETWEEN 1 AND 7),  -- 1 = lunes ... 7 = domingo (ISO)
+    hora_inicio       TIME NOT NULL,
+    hora_fin          TIME NOT NULL,
+    activa            BOOLEAN NOT NULL DEFAULT TRUE,
+    fecha_registro    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (hora_fin > hora_inicio),
+    -- Un trabajador no puede tener dos bloques que se traslapen el mismo día
+    CONSTRAINT ex_disponibilidad_sin_traslape
+        EXCLUDE USING gist (
+            id_trabajador WITH =,
+            dia_semana    WITH =,
+            tsrange(TIMESTAMP '2000-01-01' + hora_inicio,
+                    TIMESTAMP '2000-01-01' + hora_fin) WITH &&
+        )
 );
 
 -- Visitas de inspección; el costo lo paga el trabajador (RN-10)
@@ -133,16 +174,17 @@ CREATE TABLE solicitudes_servicio (
     descripcion      TEXT NOT NULL,
     direccion_exacta VARCHAR(250) NOT NULL,           -- no se muestra en búsquedas, solo la zona
     fecha_deseada    TIMESTAMP NOT NULL,
-    es_urgente       BOOLEAN NOT NULL DEFAULT FALSE,
+    presupuesto_aproximado NUMERIC(10,2) CHECK (presupuesto_aproximado > 0),  -- opcional: lo que el cliente piensa pagar
     estado           VARCHAR(20) NOT NULL DEFAULT 'abierta'
                      CHECK (estado IN ('abierta','contratada','vencida','cancelada')),
     fecha_publicacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    fecha_vencimiento TIMESTAMP NOT NULL              -- publicación + 30 días (RN-09)
+    fecha_vencimiento TIMESTAMP NOT NULL,             -- publicación + 30 días (RN-09)
+    UNIQUE (id_solicitud, id_cliente)                 -- permite verificar que el trabajo use el cliente dueño de la solicitud
 );
 
 CREATE TABLE solicitud_fotos (
     id_foto       INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    id_solicitud  INT NOT NULL REFERENCES solicitudes_servicio(id_solicitud) ON DELETE CASCADE,
+    id_solicitud  INT NOT NULL REFERENCES solicitudes_servicio(id_solicitud) ON DELETE RESTRICT,  -- puede ser evidencia en un reclamo
     ruta_archivo  VARCHAR(300) NOT NULL
 );
 
@@ -156,8 +198,19 @@ CREATE TABLE ofertas (
     estado           VARCHAR(20) NOT NULL DEFAULT 'pendiente'
                      CHECK (estado IN ('pendiente','aceptada','rechazada','vencida')),
     fecha_envio      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (id_solicitud, id_trabajador)               -- una oferta por trabajador y solicitud
+    UNIQUE (id_solicitud, id_trabajador),              -- una oferta por trabajador y solicitud
+    UNIQUE (id_oferta, id_solicitud, id_trabajador)    -- permite verificar la coherencia desde trabajos
 );
+
+-- Una solicitud no puede tener dos ofertas aceptadas a la vez.
+-- En el backend, aceptar una oferta debe hacerse en UNA transacción:
+--   1) SELECT ... FROM solicitudes_servicio WHERE id_solicitud = $1 FOR UPDATE;
+--   2) UPDATE ofertas SET estado='aceptada' WHERE id_oferta = $2;
+--   3) UPDATE ofertas SET estado='rechazada' WHERE id_solicitud = $1 AND id_oferta <> $2 AND estado='pendiente';
+--   4) INSERT INTO trabajos ...; UPDATE solicitudes_servicio SET estado='contratada';
+CREATE UNIQUE INDEX uq_una_oferta_aceptada_por_solicitud
+    ON ofertas (id_solicitud)
+    WHERE estado = 'aceptada';
 
 -- ---------------------------------------------------------------------
 -- BLOQUE 5: TRABAJOS, VISITAS PREVIAS E INCREMENTOS (RF-16 a RF-20, RF-21)
@@ -166,12 +219,11 @@ CREATE TABLE ofertas (
 -- Se crea cuando el cliente acepta una oferta (RN-01)
 CREATE TABLE trabajos (
     id_trabajo         INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    id_oferta          INT NOT NULL UNIQUE REFERENCES ofertas(id_oferta),
-    id_solicitud       INT NOT NULL REFERENCES solicitudes_servicio(id_solicitud),
-    id_cliente         INT NOT NULL REFERENCES usuarios(id_usuario),
-    id_trabajador      INT NOT NULL REFERENCES perfiles_trabajador(id_usuario),
+    id_oferta          INT NOT NULL UNIQUE,
+    id_solicitud       INT NOT NULL,
+    id_cliente         INT NOT NULL,
+    id_trabajador      INT NOT NULL,
     precio_final       NUMERIC(10,2) NOT NULL CHECK (precio_final > 0),
-    precio_incrementado NUMERIC(10,2) CHECK (precio_incrementado > 0),  -- si el cliente aprobó un aumento
     metodo_pago        VARCHAR(20) NOT NULL DEFAULT 'plataforma'
                        CHECK (metodo_pago IN ('plataforma','qr','efectivo')),
     fecha_inicio_prog  TIMESTAMP,                      -- agenda del trabajador (RN-11, RN-17)
@@ -181,13 +233,33 @@ CREATE TABLE trabajos (
                                          'terminado','cancelado','en_reclamo')),
     fecha_creacion     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     fecha_cierre       TIMESTAMP,                      -- desde aquí corren los 7 días de reclamo (RN-07)
-    CHECK (fecha_fin_prog IS NULL OR fecha_fin_prog > fecha_inicio_prog)
+    CHECK (fecha_fin_prog IS NULL OR fecha_fin_prog > fecha_inicio_prog),
+
+    -- La oferta, la solicitud y el trabajador deben corresponder entre sí
+    CONSTRAINT fk_trabajo_oferta_coherente
+        FOREIGN KEY (id_oferta, id_solicitud, id_trabajador)
+        REFERENCES ofertas (id_oferta, id_solicitud, id_trabajador),
+    -- La solicitud debe pertenecer al cliente indicado
+    CONSTRAINT fk_trabajo_solicitud_cliente
+        FOREIGN KEY (id_solicitud, id_cliente)
+        REFERENCES solicitudes_servicio (id_solicitud, id_cliente),
+    CONSTRAINT fk_trabajo_cliente FOREIGN KEY (id_cliente) REFERENCES usuarios(id_usuario),
+    CONSTRAINT fk_trabajo_trabajador FOREIGN KEY (id_trabajador) REFERENCES perfiles_trabajador(id_usuario),
+
+    -- Para que otras tablas verifiquen que cliente y trabajador son los del trabajo
+    UNIQUE (id_trabajo, id_cliente, id_trabajador),
+    UNIQUE (id_trabajo, id_cliente)
 );
+
+-- Una solicitud solo puede tener un trabajo vigente (se permite uno nuevo si el anterior se canceló)
+CREATE UNIQUE INDEX uq_un_trabajo_vigente_por_solicitud
+    ON trabajos (id_solicitud)
+    WHERE estado <> 'cancelado';
 
 -- Historial de cambios de estado (trazabilidad, RNF-07)
 CREATE TABLE trabajo_historial_estados (
     id_historial   INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    id_trabajo     INT NOT NULL REFERENCES trabajos(id_trabajo) ON DELETE CASCADE,
+    id_trabajo     INT NOT NULL REFERENCES trabajos(id_trabajo) ON DELETE RESTRICT,  -- trazabilidad: no se borra
     estado_anterior VARCHAR(25),
     estado_nuevo   VARCHAR(25) NOT NULL,
     id_usuario     INT REFERENCES usuarios(id_usuario),   -- quién hizo el cambio (NULL = sistema)
@@ -217,6 +289,23 @@ CREATE TABLE incrementos_precio (
     fecha_solicitud  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     fecha_respuesta  TIMESTAMP
 );
+
+-- Solo un incremento pendiente por trabajo a la vez
+CREATE UNIQUE INDEX uq_un_incremento_pendiente_por_trabajo
+    ON incrementos_precio (id_trabajo)
+    WHERE estado = 'pendiente';
+
+-- El precio total NO se guarda: se calcula siempre a partir de los incrementos aceptados,
+-- así nunca queda desactualizado (reemplaza a la columna trabajos.precio_incrementado).
+CREATE VIEW vista_trabajos_precio_total AS
+SELECT t.id_trabajo,
+       t.precio_final,
+       COALESCE(SUM(i.monto_adicional) FILTER (WHERE i.estado = 'aceptado'), 0) AS total_incrementos,
+       t.precio_final
+         + COALESCE(SUM(i.monto_adicional) FILTER (WHERE i.estado = 'aceptado'), 0) AS precio_total
+FROM trabajos t
+LEFT JOIN incrementos_precio i ON i.id_trabajo = t.id_trabajo
+GROUP BY t.id_trabajo, t.precio_final;
 
 -- Solicitud de "trabajo terminado" (RN-06)
 CREATE TABLE solicitudes_finalizacion (
@@ -267,19 +356,21 @@ CREATE TABLE cancelaciones (
 
 CREATE TABLE calificaciones (
     id_calificacion  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    id_trabajo       INT NOT NULL UNIQUE REFERENCES trabajos(id_trabajo),
-    id_cliente       INT NOT NULL REFERENCES usuarios(id_usuario),
-    id_trabajador    INT NOT NULL REFERENCES perfiles_trabajador(id_usuario),
+    id_trabajo       INT NOT NULL UNIQUE,              -- una calificación pública por trabajo (la hace el cliente)
+    id_cliente       INT NOT NULL,
+    id_trabajador    INT NOT NULL,
     puntaje          SMALLINT NOT NULL CHECK (puntaje BETWEEN 1 AND 5),
     comentario       VARCHAR(500),
     respuesta_trabajador VARCHAR(500),
-    fecha            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    fecha            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_trabajo, id_cliente, id_trabajador)
+        REFERENCES trabajos (id_trabajo, id_cliente, id_trabajador)
 );
 
 -- Conserva cada cambio de la calificación (RN-15, RF-28)
 CREATE TABLE calificaciones_historial (
     id_historial     INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    id_calificacion  INT NOT NULL REFERENCES calificaciones(id_calificacion) ON DELETE CASCADE,
+    id_calificacion  INT NOT NULL REFERENCES calificaciones(id_calificacion) ON DELETE RESTRICT,
     puntaje_anterior SMALLINT NOT NULL CHECK (puntaje_anterior BETWEEN 1 AND 5),
     puntaje_nuevo    SMALLINT NOT NULL CHECK (puntaje_nuevo BETWEEN 1 AND 5),
     fecha_cambio     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -288,12 +379,14 @@ CREATE TABLE calificaciones_historial (
 -- Calificación interna del cliente (solo visible para administración, RF-30)
 CREATE TABLE calificaciones_internas_cliente (
     id_calificacion_int INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    id_trabajo       INT NOT NULL UNIQUE REFERENCES trabajos(id_trabajo),
-    id_trabajador    INT NOT NULL REFERENCES perfiles_trabajador(id_usuario),
-    id_cliente       INT NOT NULL REFERENCES usuarios(id_usuario),
+    id_trabajo       INT NOT NULL UNIQUE,
+    id_trabajador    INT NOT NULL,
+    id_cliente       INT NOT NULL,
     puntaje          SMALLINT NOT NULL CHECK (puntaje BETWEEN 1 AND 5),
     nota             VARCHAR(500),
-    fecha            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    fecha            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_trabajo, id_cliente, id_trabajador)
+        REFERENCES trabajos (id_trabajo, id_cliente, id_trabajador)
 );
 
 CREATE TABLE reclamos (
@@ -312,8 +405,36 @@ CREATE TABLE reclamos (
 
 CREATE TABLE reclamo_evidencias (
     id_evidencia  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    id_reclamo    INT NOT NULL REFERENCES reclamos(id_reclamo) ON DELETE CASCADE,
+    id_reclamo    INT NOT NULL REFERENCES reclamos(id_reclamo) ON DELETE RESTRICT,  -- evidencia: no se borra
     ruta_archivo  VARCHAR(300) NOT NULL
+);
+
+-- Solicitudes de devolución: monto, motivo, aprobación y procesamiento (RN-08).
+-- El movimiento de dinero real queda en pagos (tipo = 'devolucion'), enlazado por id_pago.
+CREATE TABLE devoluciones (
+    id_devolucion       INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id_trabajo          INT NOT NULL,
+    id_cliente          INT NOT NULL,                       -- quien recibe la devolución
+    id_reclamo          INT REFERENCES reclamos(id_reclamo),  -- si nace de un reclamo (opcional)
+    monto               NUMERIC(10,2) NOT NULL CHECK (monto > 0),
+    motivo              VARCHAR(500) NOT NULL,
+    estado              VARCHAR(20) NOT NULL DEFAULT 'solicitada'
+                        CHECK (estado IN ('solicitada','aprobada','rechazada','procesada','fallida')),
+    fecha_solicitud     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Aprobación
+    id_aprobado_por     INT REFERENCES usuarios(id_usuario),  -- supervisor que decide
+    fecha_aprobacion    TIMESTAMP,
+    motivo_rechazo      VARCHAR(300),
+    -- Procesamiento
+    id_pago             INT UNIQUE REFERENCES pagos(id_pago),  -- pago tipo 'devolucion' generado
+    fecha_procesamiento TIMESTAMP,
+    FOREIGN KEY (id_trabajo, id_cliente)
+        REFERENCES trabajos (id_trabajo, id_cliente) ON DELETE RESTRICT,
+    -- Coherencia entre estado y datos registrados
+    CHECK (estado NOT IN ('aprobada','procesada','fallida')
+           OR (id_aprobado_por IS NOT NULL AND fecha_aprobacion IS NOT NULL)),
+    CHECK (estado <> 'rechazada' OR (id_aprobado_por IS NOT NULL AND motivo_rechazo IS NOT NULL)),
+    CHECK (estado <> 'procesada' OR (id_pago IS NOT NULL AND fecha_procesamiento IS NOT NULL))
 );
 
 -- ---------------------------------------------------------------------
@@ -380,5 +501,5 @@ CREATE TABLE bitacora_auditoria (
 );
 
 -- =====================================================================
---  FIN: 33 tablas
+--  FIN: 33 tablas (31 originales + devoluciones + disponibilidad_trabajador) y 1 vista
 -- =====================================================================
