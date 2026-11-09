@@ -1,0 +1,17 @@
+# Dependencias
+node_modules/
+**/node_modules/
+
+# Archivos generados
+dist/
+**/dist/
+coverage/
+
+# Variables de entorno y contraseñas
+.env
+.env.*
+!.env.example
+
+# Archivos temporales
+*.log
+.DS_Store
