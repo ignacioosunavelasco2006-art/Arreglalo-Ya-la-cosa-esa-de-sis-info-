@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { UsuariosModule } from './usuarios/usuarios.module';
+import { TrabajadoresModule } from './trabajadores/trabajadores.module';
 
 @Module({
   imports: [
@@ -10,6 +11,7 @@ import { UsuariosModule } from './usuarios/usuarios.module';
       isGlobal: true,
     }),
     UsuariosModule,
+    TrabajadoresModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
