@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { UsuariosModule } from './usuarios/usuarios.module';
 import { TrabajadoresModule } from './trabajadores/trabajadores.module';
+import { SolicitudesModule } from './solicitudes/solicitudes.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { TrabajadoresModule } from './trabajadores/trabajadores.module';
     }),
     UsuariosModule,
     TrabajadoresModule,
+    SolicitudesModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
