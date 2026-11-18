@@ -1,3 +1,10 @@
+import {
+  IsBoolean,
+  IsOptional,
+} from 'class-validator';
+
 export class ActualizarNotificacionDto {
-  leida: boolean;
+  @IsOptional()
+  @IsBoolean()
+  leida?: boolean;
 }
