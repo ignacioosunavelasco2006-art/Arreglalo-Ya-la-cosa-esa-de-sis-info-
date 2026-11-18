@@ -6,8 +6,14 @@ import { UsuariosModule } from './usuarios/usuarios.module';
 import { TrabajadoresModule } from './trabajadores/trabajadores.module';
 import { SolicitudesModule } from './solicitudes/solicitudes.module';
 import { TrabajosModule } from './trabajos/trabajos.module';
+<<<<<<< HEAD
+import { PagosModule } from './pagos/pagos.module';
+import { CalificacionesModule } from './calificaciones/calificaciones.module';
+import { ReclamosModule } from './reclamos/reclamos.module';
+=======
 import { AuthModule } from './auth/auth.module';
 import { CatalogosModule } from './catalogos/catalogos.module';
+>>>>>>> 717716786baf2185b23c692d14cdb44219e30c53
 
 @Module({
   imports: [
@@ -18,6 +24,9 @@ import { CatalogosModule } from './catalogos/catalogos.module';
     TrabajadoresModule,
     SolicitudesModule,
     TrabajosModule,
+    PagosModule,
+    CalificacionesModule,
+    ReclamosModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
