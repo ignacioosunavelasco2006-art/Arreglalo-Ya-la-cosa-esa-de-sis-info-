@@ -11,6 +11,7 @@ import { CalificacionesModule } from './calificaciones/calificaciones.module';
 import { ReclamosModule } from './reclamos/reclamos.module';
 import { AuthModule } from './auth/auth.module';
 import { CatalogosModule } from './catalogos/catalogos.module';
+import { SistemaModule } from './sistema/sistema.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { CatalogosModule } from './catalogos/catalogos.module';
     PagosModule,
     CalificacionesModule,
     ReclamosModule,
+    SistemaModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
