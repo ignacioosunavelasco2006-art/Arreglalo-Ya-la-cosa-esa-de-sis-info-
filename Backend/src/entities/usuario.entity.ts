@@ -1,9 +1,5 @@
-
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { UsuarioRol } from './usuario-rol.entity';
 
 @Entity('usuarios')
 export class Usuario {
@@ -19,7 +15,8 @@ export class Usuario {
   @Column({ type: 'varchar', length: 150, unique: true })
   correo: string;
 
-  @Column({ type: 'varchar', length: 255 })
+  // select:false = el hash NO sale en consultas normales (más seguro)
+  @Column({ type: 'varchar', length: 255, select: false })
   contrasena_hash: string;
 
   @Column({ type: 'varchar', length: 20 })
@@ -33,4 +30,7 @@ export class Usuario {
     default: () => 'CURRENT_TIMESTAMP',
   })
   fecha_registro: Date;
+
+  @OneToMany(() => UsuarioRol, (ur) => ur.usuario)
+  usuarioRoles: UsuarioRol[];
 }
