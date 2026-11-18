@@ -6,13 +6,15 @@ import { UsuariosModule } from './usuarios/usuarios.module';
 import { TrabajadoresModule } from './trabajadores/trabajadores.module';
 import { SolicitudesModule } from './solicitudes/solicitudes.module';
 import { TrabajosModule } from './trabajos/trabajos.module';
+import { AuthModule } from './auth/auth.module';
+import { CatalogosModule } from './catalogos/catalogos.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
+    ConfigModule.forRoot({ isGlobal: true }),
     UsuariosModule,
+    AuthModule,
+    CatalogosModule,
     TrabajadoresModule,
     SolicitudesModule,
     TrabajosModule,
