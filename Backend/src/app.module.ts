@@ -6,6 +6,9 @@ import { UsuariosModule } from './usuarios/usuarios.module';
 import { TrabajadoresModule } from './trabajadores/trabajadores.module';
 import { SolicitudesModule } from './solicitudes/solicitudes.module';
 import { TrabajosModule } from './trabajos/trabajos.module';
+import { PagosModule } from './pagos/pagos.module';
+import { CalificacionesModule } from './calificaciones/calificaciones.module';
+import { ReclamosModule } from './reclamos/reclamos.module';
 
 @Module({
   imports: [
@@ -16,6 +19,9 @@ import { TrabajosModule } from './trabajos/trabajos.module';
     TrabajadoresModule,
     SolicitudesModule,
     TrabajosModule,
+    PagosModule,
+    CalificacionesModule,
+    ReclamosModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
