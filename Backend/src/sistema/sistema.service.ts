@@ -1,4 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+
+import { ParametroSistema } from '../entities/parametro-sistema.entity';
+import { Notificacion } from '../entities/notificacion.entity';
+import { BitacoraAuditoria } from '../entities/bitacora-auditoria.entity';
+
 import { CrearParametroDto } from './dto/crear-parametro.dto';
 import { ActualizarParametroDto } from './dto/actualizar-parametro.dto';
 import { CrearNotificacionDto } from './dto/crear-notificacion.dto';
@@ -7,67 +18,92 @@ import { RegistrarAuditoriaDto } from './dto/registrar-auditoria.dto';
 
 @Injectable()
 export class SistemaService {
-  private parametros: any[] = [
-    { id: 1, clave: 'COMISION_PLATAFORMA', valor: '5', descripcion: 'Comisión digital (%)' },
-    { id: 2, clave: 'ANTICIPO_SERVICIO', valor: '25', descripcion: 'Anticipo obligatorio (%)' },
-    { id: 3, clave: 'VIGENCIA_SOLICITUD_DIAS', valor: '30', descripcion: 'Días de vigencia' },
-    { id: 4, clave: 'PLAZO_RECLAMO_DIAS', valor: '7', descripcion: 'Días para reclamar tras cierre' },
-  ];
-  private notificaciones: any[] = [];
-  private auditorias: any[] = [];
+  constructor(
+    @InjectRepository(ParametroSistema)
+    private readonly parametroRepository: Repository<ParametroSistema>,
 
-  listarParametros() {
-    return this.parametros;
+    @InjectRepository(Notificacion)
+    private readonly notificacionRepository: Repository<Notificacion>,
+
+    @InjectRepository(BitacoraAuditoria)
+    private readonly auditoriaRepository: Repository<BitacoraAuditoria>,
+  ) {}
+
+
+  async crearParametro(dto: CrearParametroDto) {
+    const parametro = this.parametroRepository.create(dto);
+    return this.parametroRepository.save(parametro);
   }
 
-  crearParametro(dto: CrearParametroDto) {
-    const nuevo = { id: this.parametros.length + 1, ...dto, actualizadoEn: new Date() };
-    this.parametros.push(nuevo);
-    return nuevo;
+  async obtenerParametros() {
+    return this.parametroRepository.find();
   }
 
-  actualizarParametro(id: number, dto: ActualizarParametroDto) {
-    const param = this.parametros.find((p) => p.id === id);
-    if (!param) throw new NotFoundException('Parámetro no encontrado');
-    param.valor = dto.valor;
-    if (dto.descripcion) param.descripcion = dto.descripcion;
-    param.actualizadoEn = new Date();
-    return param;
+  async obtenerParametro(clave: string) {
+    const parametro = await this.parametroRepository.findOneBy({ clave });
+
+    if (!parametro) {
+      throw new NotFoundException('Parámetro no encontrado');
+    }
+
+    return parametro;
   }
 
-  listarNotificacionesPorUsuario(usuarioId: number) {
-    return this.notificaciones.filter((n) => n.usuarioId === usuarioId);
+  async actualizarParametro(
+    clave: string,
+    dto: ActualizarParametroDto,
+  ) {
+    const parametro = await this.obtenerParametro(clave);
+    Object.assign(parametro, dto);
+    return this.parametroRepository.save(parametro);
   }
 
-  crearNotificacion(dto: CrearNotificacionDto) {
-    const nueva = {
-      id: this.notificaciones.length + 1,
-      ...dto,
-      leida: false,
-      creadaEn: new Date(),
-    };
-    this.notificaciones.push(nueva);
-    return nueva;
+
+  async crearNotificacion(dto: CrearNotificacionDto) {
+    const notificacion = this.notificacionRepository.create(dto);
+    return this.notificacionRepository.save(notificacion);
   }
 
-  marcarNotificacionLeida(id: number, dto: ActualizarNotificacionDto) {
-    const notif = this.notificaciones.find((n) => n.id === id);
-    if (!notif) throw new NotFoundException('Notificación no encontrada');
-    notif.leida = dto.leida;
-    return notif;
+  async obtenerNotificaciones(idUsuario: number) {
+    return this.notificacionRepository.find({
+      where: { id_usuario: idUsuario },
+    });
   }
 
-  listarAuditorias() {
-    return this.auditorias;
+  async obtenerNotificacion(id: number) {
+    const notificacion = await this.notificacionRepository.findOneBy({
+      id_notificacion: id,
+    });
+
+    if (!notificacion) {
+      throw new NotFoundException('Notificación no encontrada');
+    }
+
+    return notificacion;
   }
 
-  registrarAuditoria(dto: RegistrarAuditoriaDto) {
-    const registro = {
-      id: this.auditorias.length + 1,
-      ...dto,
-      fecha: new Date(),
-    };
-    this.auditorias.push(registro);
-    return registro;
+  async actualizarNotificacion(
+    id: number,
+    dto: ActualizarNotificacionDto,
+  ) {
+    const notificacion = await this.obtenerNotificacion(id);
+    Object.assign(notificacion, dto);
+    return this.notificacionRepository.save(notificacion);
+  }
+
+
+  async registrarAuditoria(dto: RegistrarAuditoriaDto) {
+    const registro = this.auditoriaRepository.create(dto);
+    return this.auditoriaRepository.save(registro);
+  }
+
+  async obtenerAuditoria() {
+    return this.auditoriaRepository.find();
+  }
+
+  async obtenerAuditoriaPorUsuario(idUsuario: number) {
+    return this.auditoriaRepository.find({
+      where: { id_usuario: idUsuario },
+    });
   }
 }
