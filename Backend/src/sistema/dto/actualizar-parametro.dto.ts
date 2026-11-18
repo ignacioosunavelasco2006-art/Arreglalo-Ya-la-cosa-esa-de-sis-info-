@@ -1,5 +1,22 @@
+import {
+  IsString,
+  IsOptional,
+  MaxLength,
+  IsInt,
+} from 'class-validator';
+
 export class ActualizarParametroDto {
-  valor: string;
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  valor?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
   descripcion?: string;
-  modificadoPorId?: number;
+
+  @IsOptional()
+  @IsInt()
+  id_modificado_por?: number;
 }
