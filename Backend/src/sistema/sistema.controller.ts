@@ -1,5 +1,15 @@
-import { Controller, Get, Post, Patch, Param, Body, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Param,
+  ParseIntPipe,
+} from '@nestjs/common';
+
 import { SistemaService } from './sistema.service';
+
 import { CrearParametroDto } from './dto/crear-parametro.dto';
 import { ActualizarParametroDto } from './dto/actualizar-parametro.dto';
 import { CrearNotificacionDto } from './dto/crear-notificacion.dto';
@@ -8,29 +18,31 @@ import { RegistrarAuditoriaDto } from './dto/registrar-auditoria.dto';
 
 @Controller('sistema')
 export class SistemaController {
-  constructor(private readonly sistemaService: SistemaService) {}
-
-  @Get('parametros')
-  obtenerParametros() {
-    return this.sistemaService.listarParametros();
-  }
+  constructor(
+    private readonly sistemaService: SistemaService,
+  ) {}
 
   @Post('parametros')
   crearParametro(@Body() dto: CrearParametroDto) {
     return this.sistemaService.crearParametro(dto);
   }
 
-  @Patch('parametros/:id')
-  actualizarParametro(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: ActualizarParametroDto,
-  ) {
-    return this.sistemaService.actualizarParametro(id, dto);
+  @Get('parametros')
+  obtenerParametros() {
+    return this.sistemaService.obtenerParametros();
   }
 
-  @Get('notificaciones/:usuarioId')
-  obtenerNotificaciones(@Param('usuarioId', ParseIntPipe) usuarioId: number) {
-    return this.sistemaService.listarNotificacionesPorUsuario(usuarioId);
+  @Get('parametros/:clave')
+  obtenerParametro(@Param('clave') clave: string) {
+    return this.sistemaService.obtenerParametro(clave);
+  }
+
+  @Patch('parametros/:clave')
+  actualizarParametro(
+    @Param('clave') clave: string,
+    @Body() dto: ActualizarParametroDto,
+  ) {
+    return this.sistemaService.actualizarParametro(clave, dto);
   }
 
   @Post('notificaciones')
@@ -38,21 +50,35 @@ export class SistemaController {
     return this.sistemaService.crearNotificacion(dto);
   }
 
+  @Get('notificaciones/usuario/:idUsuario')
+  obtenerNotificaciones(
+    @Param('idUsuario', ParseIntPipe) idUsuario: number,
+  ) {
+    return this.sistemaService.obtenerNotificaciones(idUsuario);
+  }
+
   @Patch('notificaciones/:id')
   actualizarNotificacion(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ActualizarNotificacionDto,
   ) {
-    return this.sistemaService.marcarNotificacionLeida(id, dto);
-  }
-
-  @Get('auditoria')
-  obtenerAuditoria() {
-    return this.sistemaService.listarAuditorias();
+    return this.sistemaService.actualizarNotificacion(id, dto);
   }
 
   @Post('auditoria')
   registrarAuditoria(@Body() dto: RegistrarAuditoriaDto) {
     return this.sistemaService.registrarAuditoria(dto);
+  }
+
+  @Get('auditoria')
+  obtenerAuditoria() {
+    return this.sistemaService.obtenerAuditoria();
+  }
+
+  @Get('auditoria/usuario/:idUsuario')
+  obtenerAuditoriaPorUsuario(
+    @Param('idUsuario', ParseIntPipe) idUsuario: number,
+  ) {
+    return this.sistemaService.obtenerAuditoriaPorUsuario(idUsuario);
   }
 }
