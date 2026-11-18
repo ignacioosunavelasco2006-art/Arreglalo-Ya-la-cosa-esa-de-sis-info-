@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { UsuariosModule } from './usuarios/usuarios.module';
 import { TrabajadoresModule } from './trabajadores/trabajadores.module';
 import { SolicitudesModule } from './solicitudes/solicitudes.module';
+import { TrabajosModule } from './trabajos/trabajos.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { SolicitudesModule } from './solicitudes/solicitudes.module';
     UsuariosModule,
     TrabajadoresModule,
     SolicitudesModule,
+    TrabajosModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
