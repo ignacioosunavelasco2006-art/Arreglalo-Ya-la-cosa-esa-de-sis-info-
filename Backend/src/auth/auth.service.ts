@@ -42,11 +42,9 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales incorrectas.');
     }
 
-    if (usuario.estado !== 'activa') {
-      throw new UnauthorizedException(
-        `La cuenta está ${usuario.estado}. Contacta con administración.`,
-      );
-    }
+    if (usuario.estado === 'eliminada') {
+  throw new UnauthorizedException('La cuenta no existe o fue eliminada.');
+}
 
     const roles = usuario.usuarioRoles.map((ur) => ur.rol.nombre);
 
