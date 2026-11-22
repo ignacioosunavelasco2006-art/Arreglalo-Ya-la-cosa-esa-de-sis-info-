@@ -1,6 +1,10 @@
+import { IsInt, IsOptional, IsString, MaxLength } from 'class-validator';
+
+// Cancela el cliente o el trabajador del trabajo (se deduce del token).
 export class CancelarTrabajoDto {
+  @IsInt()
   id_trabajo: number;
-  id_usuario: number; // quien cancela (cliente o trabajador)
+
+  @IsOptional() @IsString() @MaxLength(300)
   motivo?: string;
 }
- 

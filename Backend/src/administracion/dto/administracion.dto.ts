@@ -9,7 +9,7 @@ import {
 } from 'class-validator';
 
 // ⚠ Verifica que los valores de "tipo" coincidan con el CHECK de tu SQL.
-export const TIPOS_INCIDENTE = ['cancelacion', 'atraso'];
+export const TIPOS_INCIDENTE = ['cancelacion', 'atraso', 'reclamo'];
 
 export class RegistrarIncidenteDto {
   @IsInt()

@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 
 import { ParametroSistema } from '../entities/parametro-sistema.entity';
 import { Notificacion } from '../entities/notificacion.entity';
@@ -33,6 +33,7 @@ export class SistemaService {
   private readonly logger = new Logger(SistemaService.name);
 
   constructor(
+    private readonly dataSource: DataSource,
     @InjectRepository(ParametroSistema)
     private readonly parametroRepository: Repository<ParametroSistema>,
     @InjectRepository(Notificacion)
@@ -91,6 +92,49 @@ export class SistemaService {
     }
   }
 
+  // Notifica a TODOS los usuarios activos que tengan un rol (ej. avisar a los supervisores).
+  async notificarRol(rol: string, tipo: string, mensaje: string) {
+    const destinatarios: { id_usuario: number }[] = await this.dataSource.query(
+      `SELECT DISTINCT u.id_usuario
+         FROM usuarios u
+         JOIN usuario_roles ur ON ur.id_usuario = u.id_usuario
+         JOIN roles r ON r.id_rol = ur.id_rol
+        WHERE r.nombre = $1 AND u.estado <> 'eliminada'`,
+      [rol],
+    );
+    for (const d of destinatarios) {
+      await this.notificar(d.id_usuario, tipo, mensaje);
+    }
+    return destinatarios.length;
+  }
+
+  // Igual que notificarRol, pero sin repetir el mismo aviso a cada usuario del rol.
+  async notificarRolUnaVez(rol: string, tipo: string, mensaje: string) {
+    const destinatarios: { id_usuario: number }[] = await this.dataSource.query(
+      `SELECT DISTINCT u.id_usuario
+         FROM usuarios u
+         JOIN usuario_roles ur ON ur.id_usuario = u.id_usuario
+         JOIN roles r ON r.id_rol = ur.id_rol
+        WHERE r.nombre = $1 AND u.estado <> 'eliminada'`,
+      [rol],
+    );
+    for (const d of destinatarios) {
+      await this.notificarUnaVez(d.id_usuario, tipo, mensaje);
+    }
+    return destinatarios.length;
+  }
+
+  // Para recordatorios de tareas programadas: no repite el mismo aviso al mismo usuario.
+  async notificarUnaVez(idUsuario: number, tipo: string, mensaje: string) {
+    const existe = await this.notificacionRepository.findOneBy({
+      id_usuario: idUsuario,
+      tipo: tipo.slice(0, 40),
+      mensaje: mensaje.slice(0, 300),
+    });
+    if (existe) return null;
+    return this.notificar(idUsuario, tipo, mensaje);
+  }
+
   // RF-34: lee un parámetro numérico; si no existe usa el valor por defecto.
   async obtenerNumero(clave: string, defecto: number): Promise<number> {
     const parametro = await this.parametroRepository.findOneBy({ clave });
@@ -98,10 +142,11 @@ export class SistemaService {
     return Number.isFinite(numero) ? numero : defecto;
   }
 
-  // Devuelve una fracción: acepta "5" o "0.05" y entrega 0.05.
+  // Devuelve una fracción: acepta "5" (= 5 %) o "0.05" y entrega 0.05.
+  // Regla: un valor >= 1 es un porcentaje entero; uno menor a 1 ya es una fracción.
   async obtenerPorcentaje(clave: string, defecto: number): Promise<number> {
     const numero = await this.obtenerNumero(clave, defecto);
-    return numero > 1 ? numero / 100 : numero;
+    return numero >= 1 ? numero / 100 : numero;
   }
 
   // ---------------------------------------------------------------

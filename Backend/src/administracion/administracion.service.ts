@@ -44,7 +44,7 @@ export class AdministracionService {
 
   // Registro manual (supervisor/inspector). Los de cancelación del trabajador
   // los crea PagosService; después debe llamar a evaluarIncidentes().
-  async registrarIncidente(dto: RegistrarIncidenteDto, idQuienRegistra: number) {
+  async registrarIncidente(dto: RegistrarIncidenteDto, idQuienRegistra: number | null) {
     let incidente: IncidenteTrabajador;
     try {
       incidente = await this.incidenteRepository.save(

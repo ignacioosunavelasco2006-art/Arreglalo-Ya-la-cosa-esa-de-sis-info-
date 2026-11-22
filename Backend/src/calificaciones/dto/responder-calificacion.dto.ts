@@ -1,4 +1,6 @@
+import { IsString, MaxLength, MinLength } from 'class-validator';
+
 export class ResponderCalificacionDto {
-  id_trabajador: number;
+  @IsString() @MinLength(1) @MaxLength(500)
   respuesta: string;
 }

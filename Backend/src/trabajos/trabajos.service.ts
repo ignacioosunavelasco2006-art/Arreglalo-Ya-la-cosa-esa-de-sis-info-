@@ -7,8 +7,9 @@ import {
 } from '@nestjs/common';
 
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, FindOptionsWhere, Not, Repository } from 'typeorm';
+import { DataSource, EntityManager, FindOptionsWhere, Not, Repository } from 'typeorm';
 
+import { Usuario } from '../entities/usuario.entity';
 import { PerfilTrabajador } from '../entities/perfil-trabajador.entity';
 import { SolicitudServicio } from '../entities/solicitud-servicio.entity';
 import { Oferta } from '../entities/oferta.entity';
@@ -18,6 +19,9 @@ import { VisitaPrevia } from '../entities/visita-previa.entity';
 import { IncrementoPrecio } from '../entities/incremento-precio.entity';
 import { SolicitudFinalizacion } from '../entities/solicitud-finalizacion.entity';
 import { VistaTrabajosPrecioTotal } from '../entities/vista-trabajos-precio-total.entity';
+
+import { SistemaService } from '../sistema/sistema.service';
+import { PagosService } from '../pagos/pagos.service';
 
 import { AceptarOfertaDto } from './dto/aceptar-oferta.dto';
 import { ActualizarEstadoTrabajoDto } from './dto/actualizar-estado-trabajo.dto';
@@ -53,10 +57,19 @@ const TRANSICIONES: Record<string, string[]> = {
   en_camino: ['en_proceso'],
 };
 const ESTADOS_VISITA_ACTIVA = ['propuesta', 'aceptada', 'realizada'];
+const DIA_MS = 24 * 60 * 60 * 1000;
+
+export interface UsuarioContexto {
+  id_usuario: number;
+  roles: string[];
+}
 
 @Injectable()
 export class TrabajosService {
   constructor(
+    private readonly dataSource: DataSource,
+    private readonly sistema: SistemaService,
+    private readonly pagosService: PagosService,
     @InjectRepository(PerfilTrabajador)
     private readonly perfilRepository: Repository<PerfilTrabajador>,
     @InjectRepository(SolicitudServicio)
@@ -82,11 +95,7 @@ export class TrabajosService {
   // ---------------------------------------------------------------
 
   // Aceptar una oferta (RF-14, RN-01): crea el trabajo en UNA transacción
-  async aceptarOferta(dto: AceptarOfertaDto) {
-    if (!dto.id_oferta || !dto.id_cliente) {
-      throw new BadRequestException('id_oferta e id_cliente son obligatorios');
-    }
-
+  async aceptarOferta(idCliente: number, dto: AceptarOfertaDto) {
     const metodoPago = dto.metodo_pago ?? 'plataforma';
     if (!METODOS_PAGO.includes(metodoPago)) {
       throw new BadRequestException(
@@ -117,7 +126,7 @@ export class TrabajosService {
           if (!solicitud) {
             throw new NotFoundException('Solicitud no encontrada');
           }
-          if (solicitud.id_cliente !== dto.id_cliente) {
+          if (solicitud.id_cliente !== idCliente) {
             throw new ForbiddenException(
               'Solo el dueño de la solicitud puede aceptar ofertas',
             );
@@ -142,6 +151,15 @@ export class TrabajosService {
           if (!perfil || perfil.estado_verificacion !== 'aprobado') {
             throw new BadRequestException(
               'El trabajador ya no está habilitado para trabajar',
+            );
+          }
+          // P7 / RN-18: un trabajador suspendido deja de poder ser contratado
+          const cuentaTrabajador = await manager.findOne(Usuario, {
+            where: { id_usuario: oferta.id_trabajador },
+          });
+          if (!cuentaTrabajador || cuentaTrabajador.estado !== 'activa') {
+            throw new BadRequestException(
+              'El trabajador no está disponible por el momento',
             );
           }
 
@@ -222,12 +240,25 @@ export class TrabajosService {
             nuevo.id_trabajo,
             null,
             nuevo.estado,
-            dto.id_cliente,
+            idCliente,
           );
 
           return nuevo;
         },
       );
+
+      // RF-35 "aceptaciones": avisa a ambas partes (el contacto por WhatsApp queda fuera del alcance)
+      await this.sistema.notificar(
+        trabajo.id_trabajador,
+        'oferta_aceptada',
+        `¡Tu oferta fue aceptada! Trabajo #${trabajo.id_trabajo}. Queda pendiente el anticipo del cliente.`,
+      );
+      await this.sistema.notificar(
+        idCliente,
+        'pagar_anticipo',
+        `Aceptaste una oferta (trabajo #${trabajo.id_trabajo}). Paga el anticipo para programar el trabajo.`,
+      );
+      await this.sistema.auditar(idCliente, 'oferta_aceptada', 'trabajos', trabajo.id_trabajo, `oferta ${dto.id_oferta}, precio ${trabajo.precio_final}`);
 
       return this.formatearTrabajo(trabajo);
     } catch (error) {
@@ -235,41 +266,76 @@ export class TrabajosService {
     }
   }
 
-  // Historial de trabajos del cliente o del trabajador (RF-21)
-  async obtenerTrabajos(
-    idCliente?: string,
-    idTrabajador?: string,
-    estado?: string,
-  ) {
-    const where: FindOptionsWhere<Trabajo> = {};
-
-    const cliente = this.aEnteroOpcional(idCliente, 'id_cliente');
-    const trabajador = this.aEnteroOpcional(idTrabajador, 'id_trabajador');
-    if (cliente !== undefined) where.id_cliente = cliente;
-    if (trabajador !== undefined) where.id_trabajador = trabajador;
-
-    if (estado) {
-      if (!ESTADOS_TRABAJO.includes(estado)) {
-        throw new BadRequestException(
-          `estado debe ser: ${ESTADOS_TRABAJO.join(', ')}`,
-        );
-      }
-      where.estado = estado;
+  // RF-21: historial del propio usuario (como cliente y/o como trabajador)
+  async obtenerMisTrabajos(idUsuario: number, estado?: string) {
+    if (estado && !ESTADOS_TRABAJO.includes(estado)) {
+      throw new BadRequestException(`estado debe ser: ${ESTADOS_TRABAJO.join(', ')}`);
     }
-
+    const filtroEstado = estado ? { estado } : {};
     const trabajos = await this.trabajoRepository.find({
-      where,
+      where: [
+        { id_cliente: idUsuario, ...filtroEstado },
+        { id_trabajador: idUsuario, ...filtroEstado },
+      ],
       order: { fecha_creacion: 'DESC' },
     });
-
     return trabajos.map((t) => this.formatearTrabajo(t));
   }
 
+  // Vista de supervisión (reportes, reclamos): todos los trabajos con filtros
+  async obtenerTodos(filtros: { id_cliente?: number; id_trabajador?: number; estado?: string }) {
+    const where: FindOptionsWhere<Trabajo> = {};
+    if (filtros.id_cliente) where.id_cliente = filtros.id_cliente;
+    if (filtros.id_trabajador) where.id_trabajador = filtros.id_trabajador;
+    if (filtros.estado) {
+      if (!ESTADOS_TRABAJO.includes(filtros.estado)) {
+        throw new BadRequestException(`estado debe ser: ${ESTADOS_TRABAJO.join(', ')}`);
+      }
+      where.estado = filtros.estado;
+    }
+    const trabajos = await this.trabajoRepository.find({ where, order: { fecha_creacion: 'DESC' }, take: 200 });
+    return trabajos.map((t) => this.formatearTrabajo(t));
+  }
+
+  // RF-19 / CU-19: calendario del trabajador, agrupado por día y hora (sin dirección exacta)
+  async calendario(idTrabajador: number, desde?: string, hasta?: string) {
+    const ini = desde ? this.convertirFecha(desde) : new Date();
+    const fin = hasta ? this.convertirFecha(hasta) : new Date(ini.getTime() + 30 * DIA_MS);
+    if (fin.getTime() <= ini.getTime()) {
+      throw new BadRequestException('"hasta" debe ser posterior a "desde"');
+    }
+
+    const trabajos: any[] = await this.dataSource.query(
+      `SELECT t.id_trabajo, t.estado, t.fecha_inicio_prog, t.fecha_fin_prog,
+              s.id_zona, s.descripcion
+         FROM trabajos t
+         JOIN solicitudes_servicio s ON s.id_solicitud = t.id_solicitud
+        WHERE t.id_trabajador = $1 AND t.estado = ANY($2)
+          AND t.fecha_inicio_prog IS NOT NULL AND t.fecha_fin_prog IS NOT NULL
+          AND t.fecha_inicio_prog < $4 AND t.fecha_fin_prog > $3
+        ORDER BY t.fecha_inicio_prog`,
+      [idTrabajador, ESTADOS_AGENDA, ini, fin],
+    );
+
+    const porDia = new Map<string, any[]>();
+    for (const t of trabajos) {
+      const dia = new Date(t.fecha_inicio_prog).toISOString().slice(0, 10);
+      porDia.set(dia, [...(porDia.get(dia) ?? []), t]);
+    }
+
+    return {
+      desde: ini.toISOString(),
+      hasta: fin.toISOString(),
+      total_trabajos: trabajos.length,
+      dias: [...porDia.entries()].map(([fecha, items]) => ({ fecha, trabajos: items })),
+    };
+  }
+
   // Detalle completo: precio total, historial, incrementos y finalizaciones.
-  // Solo lo ven el cliente y el trabajador del trabajo.
-  async obtenerTrabajo(id: number, idUsuario?: string) {
+  // Solo lo ven el cliente y el trabajador del trabajo (y la supervisión, para reclamos).
+  async obtenerTrabajo(id: number, usuario: UsuarioContexto) {
     const trabajo = await this.buscarTrabajo(id);
-    this.verificarParte(trabajo, this.aEnteroRequerido(idUsuario, 'id_usuario'));
+    this.verificarParte(trabajo, usuario);
 
     const [vista, historial, incrementos, finalizaciones, solicitud] =
       await Promise.all([
@@ -306,10 +372,10 @@ export class TrabajosService {
   }
 
   // El trabajador marca 'en_camino' o 'en_proceso'
-  async actualizarEstado(id: number, dto: ActualizarEstadoTrabajoDto) {
+  async actualizarEstado(id: number, idTrabajador: number, dto: ActualizarEstadoTrabajoDto) {
     const trabajo = await this.buscarTrabajo(id);
 
-    if (dto.id_trabajador !== trabajo.id_trabajador) {
+    if (idTrabajador !== trabajo.id_trabajador) {
       throw new ForbiddenException(
         'Solo el trabajador asignado puede cambiar el estado',
       );
@@ -332,12 +398,19 @@ export class TrabajosService {
           id,
           anterior,
           dto.estado,
-          dto.id_trabajador,
+          idTrabajador,
         );
         return guardado;
       },
     );
 
+    // RF-35 "cambios de estado": el cliente se entera
+    const textoEstado = dto.estado === 'en_camino' ? 'va en camino' : 'comenzó el trabajo';
+    await this.sistema.notificar(
+      trabajo.id_cliente,
+      `trabajo_${dto.estado}`,
+      `Tu trabajo #${id}: el trabajador ${textoEstado}.`,
+    );
     return this.formatearTrabajo(actualizado);
   }
 
@@ -346,10 +419,10 @@ export class TrabajosService {
   // ---------------------------------------------------------------
 
   // El trabajador propone fecha de visita para una oferta que la requiere
-  async crearVisita(dto: CrearVisitaPreviaDto) {
+  async crearVisita(idTrabajador: number, dto: CrearVisitaPreviaDto) {
     const oferta = await this.buscarOferta(dto.id_oferta);
 
-    if (oferta.id_trabajador !== dto.id_trabajador) {
+    if (oferta.id_trabajador !== idTrabajador) {
       throw new ForbiddenException('La oferta pertenece a otro trabajador');
     }
     if (!oferta.requiere_visita) {
@@ -376,15 +449,25 @@ export class TrabajosService {
       fecha_propuesta: fecha,
     });
     const guardada = await this.visitaRepository.save(visita);
+
+    const solicitud = await this.buscarSolicitud(oferta.id_solicitud);
+    await this.sistema.notificar(
+      solicitud.id_cliente,
+      'visita_propuesta',
+      `El trabajador propone una visita previa el ${fecha.toISOString().slice(0, 16).replace('T', ' ')} (solicitud #${solicitud.id_solicitud}). Acepta o rechaza la fecha.`,
+    );
     return this.formatearVisita(guardada);
   }
 
-  async obtenerVisitas(idOferta: number, idUsuario?: string) {
+  async obtenerVisitas(idOferta: number, usuario: UsuarioContexto) {
     const oferta = await this.buscarOferta(idOferta);
     const solicitud = await this.buscarSolicitud(oferta.id_solicitud);
-    const usuario = this.aEnteroRequerido(idUsuario, 'id_usuario');
 
-    if (usuario !== oferta.id_trabajador && usuario !== solicitud.id_cliente) {
+    if (
+      usuario.id_usuario !== oferta.id_trabajador &&
+      usuario.id_usuario !== solicitud.id_cliente &&
+      !this.esSupervisor(usuario)
+    ) {
       throw new ForbiddenException('No participa en esta oferta');
     }
 
@@ -396,7 +479,7 @@ export class TrabajosService {
   }
 
   // Flujo: propuesta → aceptada → realizada → precio_aceptado (o cancelada)
-  async responderVisita(idVisita: number, dto: ResponderVisitaPreviaDto) {
+  async responderVisita(idVisita: number, idUsuario: number, dto: ResponderVisitaPreviaDto) {
     const visita = await this.visitaRepository.findOne({
       where: { id_visita: idVisita },
     });
@@ -406,8 +489,8 @@ export class TrabajosService {
 
     const oferta = await this.buscarOferta(visita.id_oferta);
     const solicitud = await this.buscarSolicitud(oferta.id_solicitud);
-    const esCliente = dto.id_usuario === solicitud.id_cliente;
-    const esTrabajador = dto.id_usuario === oferta.id_trabajador;
+    const esCliente = idUsuario === solicitud.id_cliente;
+    const esTrabajador = idUsuario === oferta.id_trabajador;
 
     switch (dto.accion) {
       case 'aceptar_fecha':
@@ -464,6 +547,20 @@ export class TrabajosService {
     }
 
     const guardada = await this.visitaRepository.save(visita);
+
+    // Aviso a la otra parte según la acción
+    const avisos: Record<string, { para: number; mensaje: string }> = {
+      aceptar_fecha: { para: oferta.id_trabajador, mensaje: 'El cliente aceptó la fecha de la visita previa.' },
+      registrar_resultado: {
+        para: solicitud.id_cliente,
+        mensaje: `El trabajador registró la visita y propone un precio definitivo de Bs ${Number(dto.precio_definitivo).toFixed(2)}. Acéptalo o recházalo.`,
+      },
+      aceptar_precio: { para: oferta.id_trabajador, mensaje: 'El cliente aceptó el precio definitivo. Ya puede aceptar tu oferta.' },
+      rechazar: { para: oferta.id_trabajador, mensaje: 'El cliente rechazó la visita o el precio: se cancela sin costo.' },
+    };
+    const aviso = avisos[dto.accion];
+    if (aviso) await this.sistema.notificar(aviso.para, `visita_${dto.accion}`, aviso.mensaje);
+
     return this.formatearVisita(guardada);
   }
 
@@ -471,10 +568,10 @@ export class TrabajosService {
   // INCREMENTOS DE PRECIO (RF-17, RF-18, RN-05)
   // ---------------------------------------------------------------
 
-  async crearIncremento(dto: CrearIncrementoPrecioDto) {
+  async crearIncremento(idTrabajador: number, dto: CrearIncrementoPrecioDto) {
     const trabajo = await this.buscarTrabajo(dto.id_trabajo);
 
-    if (dto.id_trabajador !== trabajo.id_trabajador) {
+    if (idTrabajador !== trabajo.id_trabajador) {
       throw new ForbiddenException(
         'Solo el trabajador asignado puede solicitar incrementos',
       );
@@ -508,18 +605,23 @@ export class TrabajosService {
           justificacion: dto.justificacion,
         }),
       );
+
+      // RF-18: "el sistema debe notificar al cliente cualquier cambio propuesto"
+      await this.sistema.notificar(
+        trabajo.id_cliente,
+        'incremento_solicitado',
+        `El trabajador pide un incremento de Bs ${Number(dto.monto_adicional).toFixed(2)} en el trabajo #${dto.id_trabajo}. Acéptalo o recházalo: el precio no cambia sin tu aprobación.`,
+      );
+      await this.sistema.auditar(idTrabajador, 'incremento_solicitado', 'incrementos_precio', guardado.id_incremento, `monto ${dto.monto_adicional}`);
       return this.formatearIncremento(guardado);
     } catch (error) {
       return this.lanzarSiErrorBd(error);
     }
   }
 
-  async obtenerIncrementos(idTrabajo: number, idUsuario?: string) {
+  async obtenerIncrementos(idTrabajo: number, usuario: UsuarioContexto) {
     const trabajo = await this.buscarTrabajo(idTrabajo);
-    this.verificarParte(
-      trabajo,
-      this.aEnteroRequerido(idUsuario, 'id_usuario'),
-    );
+    this.verificarParte(trabajo, usuario);
 
     const incrementos = await this.incrementoRepository.find({
       where: { id_trabajo: idTrabajo },
@@ -531,6 +633,7 @@ export class TrabajosService {
   // El cliente acepta o rechaza; el precio solo cambia si acepta
   async responderIncremento(
     idIncremento: number,
+    idCliente: number,
     dto: ResponderIncrementoPrecioDto,
   ) {
     const incremento = await this.incrementoRepository.findOne({
@@ -541,7 +644,7 @@ export class TrabajosService {
     }
 
     const trabajo = await this.buscarTrabajo(incremento.id_trabajo);
-    if (dto.id_cliente !== trabajo.id_cliente) {
+    if (idCliente !== trabajo.id_cliente) {
       throw new ForbiddenException(
         'Solo el cliente del trabajo puede responder el incremento',
       );
@@ -560,6 +663,21 @@ export class TrabajosService {
     incremento.fecha_respuesta = new Date();
 
     const guardado = await this.incrementoRepository.save(incremento);
+
+    await this.sistema.notificar(
+      trabajo.id_trabajador,
+      dto.aceptar ? 'incremento_aceptado' : 'incremento_rechazado',
+      dto.aceptar
+        ? `El cliente aceptó el incremento de Bs ${Number(incremento.monto_adicional).toFixed(2)} (trabajo #${trabajo.id_trabajo}).`
+        : `El cliente rechazó el incremento (trabajo #${trabajo.id_trabajo}): se mantiene el precio anterior.`,
+    );
+    await this.sistema.auditar(
+      idCliente,
+      dto.aceptar ? 'incremento_aceptado' : 'incremento_rechazado',
+      'incrementos_precio',
+      idIncremento,
+      `monto ${incremento.monto_adicional}`,
+    );
     return this.formatearIncremento(guardado);
   }
 
@@ -567,10 +685,10 @@ export class TrabajosService {
   // FINALIZACIÓN (RF-20, RN-06)
   // ---------------------------------------------------------------
 
-  async solicitarFinalizacion(dto: SolicitarFinalizacionDto) {
+  async solicitarFinalizacion(idTrabajador: number, dto: SolicitarFinalizacionDto) {
     const trabajo = await this.buscarTrabajo(dto.id_trabajo);
 
-    if (dto.id_trabajador !== trabajo.id_trabajador) {
+    if (idTrabajador !== trabajo.id_trabajador) {
       throw new ForbiddenException(
         'Solo el trabajador asignado puede solicitar la finalización',
       );
@@ -599,14 +717,22 @@ export class TrabajosService {
       );
     }
 
-    return this.finalizacionRepository.save(
+    const guardada = await this.finalizacionRepository.save(
       this.finalizacionRepository.create({ id_trabajo: dto.id_trabajo }),
     );
+
+    await this.sistema.notificar(
+      trabajo.id_cliente,
+      'finalizacion_solicitada',
+      `El trabajador indica que terminó el trabajo #${dto.id_trabajo}. Revisa el resultado y confírmalo o recházalo.`,
+    );
+    return guardada;
   }
 
   // El cliente acepta (trabajo terminado) o rechaza con motivo (el trabajo continúa)
   async responderFinalizacion(
     idFinalizacion: number,
+    idCliente: number,
     dto: ResponderFinalizacionDto,
   ) {
     const finalizacion = await this.finalizacionRepository.findOne({
@@ -617,7 +743,7 @@ export class TrabajosService {
     }
 
     const trabajo = await this.buscarTrabajo(finalizacion.id_trabajo);
-    if (dto.id_cliente !== trabajo.id_cliente) {
+    if (idCliente !== trabajo.id_cliente) {
       throw new ForbiddenException(
         'Solo el cliente del trabajo puede responder la solicitud',
       );
@@ -640,7 +766,7 @@ export class TrabajosService {
       );
     }
 
-    return this.trabajoRepository.manager.transaction(async (manager) => {
+    const resultado = await this.trabajoRepository.manager.transaction(async (manager) => {
       finalizacion.fecha_respuesta = new Date();
 
       if (dto.aceptar) {
@@ -655,7 +781,7 @@ export class TrabajosService {
           trabajo.id_trabajo,
           anterior,
           'terminado',
-          dto.id_cliente,
+          idCliente,
         );
       } else {
         finalizacion.estado = 'rechazada';
@@ -665,6 +791,27 @@ export class TrabajosService {
       const guardada = await manager.save(finalizacion);
       return { finalizacion: guardada, estado_trabajo: trabajo.estado };
     });
+
+    if (dto.aceptar) {
+      // RF-20 → RF-25: el cierre dispara el cobro del saldo y la liquidación al trabajador
+      // (menos la comisión). Si falla, el trabajo ya quedó terminado y se alerta a supervisión.
+      const pago = await this.pagosService.procesarCierre(trabajo.id_trabajo);
+      await this.sistema.notificar(
+        trabajo.id_trabajador,
+        'trabajo_terminado',
+        `El cliente confirmó el trabajo #${trabajo.id_trabajo}.`,
+      );
+      await this.sistema.auditar(idCliente, 'finalizacion_aceptada', 'trabajos', trabajo.id_trabajo);
+      return { ...resultado, pago };
+    }
+
+    await this.sistema.notificar(
+      trabajo.id_trabajador,
+      'finalizacion_rechazada',
+      `El cliente rechazó la finalización del trabajo #${trabajo.id_trabajo}: ${dto.motivo_rechazo}. El trabajo continúa.`,
+    );
+    await this.sistema.auditar(idCliente, 'finalizacion_rechazada', 'trabajos', trabajo.id_trabajo, dto.motivo_rechazo ?? null);
+    return resultado;
   }
 
   // ---------------------------------------------------------------
@@ -701,8 +848,15 @@ export class TrabajosService {
     return solicitud;
   }
 
-  private verificarParte(trabajo: Trabajo, idUsuario: number) {
-    if (idUsuario !== trabajo.id_cliente && idUsuario !== trabajo.id_trabajador) {
+  private esSupervisor(usuario: UsuarioContexto) {
+    return usuario.roles.includes('supervisor') || usuario.roles.includes('super_supervisor');
+  }
+
+  // Las partes del trabajo y la supervisión (que atiende reclamos)
+  private verificarParte(trabajo: Trabajo, usuario: UsuarioContexto) {
+    const esParte =
+      usuario.id_usuario === trabajo.id_cliente || usuario.id_usuario === trabajo.id_trabajador;
+    if (!esParte && !this.esSupervisor(usuario)) {
       throw new ForbiddenException('No participa en este trabajo');
     }
   }

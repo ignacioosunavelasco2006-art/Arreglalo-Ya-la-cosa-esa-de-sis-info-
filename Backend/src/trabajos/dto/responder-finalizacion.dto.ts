@@ -1,5 +1,10 @@
+import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
+
 export class ResponderFinalizacionDto {
-  id_cliente: number;
+  @IsBoolean()
   aceptar: boolean;
-  motivo_rechazo?: string; // obligatorio si rechaza
+
+  // Obligatorio si rechaza (se valida en el service)
+  @IsOptional() @IsString() @MaxLength(300)
+  motivo_rechazo?: string;
 }

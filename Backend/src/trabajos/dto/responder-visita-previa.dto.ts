@@ -1,8 +1,12 @@
+import { IsIn, IsNumber, IsOptional, IsPositive, IsString, MaxLength } from 'class-validator';
+
 export class ResponderVisitaPreviaDto {
-  id_usuario: number;
-  // 'aceptar_fecha' (cliente) | 'registrar_resultado' (trabajador)
-  // | 'aceptar_precio' (cliente) | 'rechazar' (cliente)
+  @IsIn(['aceptar_fecha', 'registrar_resultado', 'aceptar_precio', 'rechazar'])
   accion: string;
-  resultado?: string; // para 'registrar_resultado'
-  precio_definitivo?: number; // para 'registrar_resultado'
+
+  @IsOptional() @IsString() @MaxLength(500)
+  resultado?: string;
+
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive()
+  precio_definitivo?: number;
 }

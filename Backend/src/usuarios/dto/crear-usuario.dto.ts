@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class CrearUsuarioDto {
   @IsString() @MaxLength(100)
@@ -15,4 +15,10 @@ export class CrearUsuarioDto {
 
   @IsString() @MaxLength(20)
   telefono: string;
+
+  // CU-02 paso 1: 'el visitante elige el tipo de cuenta'. Por defecto cliente.
+  // Supervisor, super_supervisor e inspector NO se pueden elegir aquí.
+  @IsOptional()
+  @IsIn(['cliente', 'trabajador'])
+  tipo_cuenta?: 'cliente' | 'trabajador';
 }

@@ -1,4 +1,6 @@
+import { IsIn } from 'class-validator';
+
 export class ActualizarEstadoTrabajoDto {
-  id_trabajador: number;
-  estado: string; // 'en_camino' | 'en_proceso'
+  @IsIn(['en_camino', 'en_proceso'])
+  estado: string;
 }

@@ -1,7 +1,13 @@
+import { IsBoolean, IsNumber, IsOptional, IsPositive, IsString, MaxLength } from 'class-validator';
+
+// El trabajador sale del token; la solicitud va en la URL.
 export class CrearOfertaDto {
-  id_solicitud: number;
-  id_trabajador: number;
+  @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive()
   precio_estimado: number;
+
+  @IsOptional() @IsString() @MaxLength(500)
   comentario?: string;
+
+  @IsOptional() @IsBoolean()
   requiere_visita?: boolean;
 }

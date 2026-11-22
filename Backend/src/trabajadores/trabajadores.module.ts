@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { TrabajadoresController } from './trabajadores.controller';
 import { TrabajadoresService } from './trabajadores.service';
+import { UsuariosModule } from '../usuarios/usuarios.module';
 
 import { Usuario } from '../entities/usuario.entity';
 import { PerfilTrabajador } from '../entities/perfil-trabajador.entity';
@@ -14,6 +15,7 @@ import { Inspeccion } from '../entities/inspeccion.entity';
 
 @Module({
   imports: [
+    UsuariosModule, // para consultar si el trabajador tiene datos bancarios (RF-03)
     TypeOrmModule.forFeature([
       Usuario,
       PerfilTrabajador,

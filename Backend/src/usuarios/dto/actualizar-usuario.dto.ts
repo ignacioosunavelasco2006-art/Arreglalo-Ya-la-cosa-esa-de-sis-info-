@@ -1,8 +1,16 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { OmitType } from '@nestjs/mapped-types';
-import { CrearUsuarioDto } from './crear-usuario.dto';
+import { IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
 
-// Igual que crear, pero todo opcional y sin contraseña
-export class ActualizarUsuarioDto extends PartialType(
-  OmitType(CrearUsuarioDto, ['contrasena'] as const),
-) {}
+// La contraseña y el estado NO se cambian por aquí.
+export class ActualizarUsuarioDto {
+  @IsOptional() @IsString() @MaxLength(100)
+  nombres?: string;
+
+  @IsOptional() @IsString() @MaxLength(100)
+  apellidos?: string;
+
+  @IsOptional() @IsEmail() @MaxLength(150)
+  correo?: string;
+
+  @IsOptional() @IsString() @MaxLength(20)
+  telefono?: string;
+}

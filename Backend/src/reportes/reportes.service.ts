@@ -78,6 +78,15 @@ export class ReportesService {
       [ini, fin],
     );
 
+    // Segunda fuente de ingresos (sección 6.6): costo de las inspecciones, que paga el trabajador (RN-10)
+    const [insp] = await this.dataSource.query(
+      `SELECT COUNT(*)::int AS inspecciones,
+              COALESCE(SUM(costo_transporte), 0)::float AS costos
+         FROM inspecciones
+        WHERE estado = 'realizada' AND fecha_programada >= $1 AND fecha_programada < $2`,
+      [ini, fin],
+    );
+
     return {
       periodo,
       resumen: {
@@ -86,6 +95,8 @@ export class ReportesService {
         pagado_a_trabajadores: redondear(
           detalle.reduce((a, f) => a + f.pagado_a_trabajadores, 0),
         ),
+        inspecciones_realizadas: insp.inspecciones as number,
+        costos_inspeccion_recuperados: redondear(insp.costos),
       },
       detalle,
     };

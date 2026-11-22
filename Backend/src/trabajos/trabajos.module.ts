@@ -3,7 +3,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { TrabajosController } from './trabajos.controller';
 import { TrabajosService } from './trabajos.service';
+import { PagosModule } from '../pagos/pagos.module';
 
+import { Usuario } from '../entities/usuario.entity';
 import { PerfilTrabajador } from '../entities/perfil-trabajador.entity';
 import { SolicitudServicio } from '../entities/solicitud-servicio.entity';
 import { Oferta } from '../entities/oferta.entity';
@@ -16,7 +18,9 @@ import { VistaTrabajosPrecioTotal } from '../entities/vista-trabajos-precio-tota
 
 @Module({
   imports: [
+    PagosModule, // al aceptar la finalización se cobra el saldo y se liquida (RF-20 → RF-25)
     TypeOrmModule.forFeature([
+      Usuario,
       PerfilTrabajador,
       SolicitudServicio,
       Oferta,
