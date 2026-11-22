@@ -12,13 +12,7 @@ import { Oferta } from '../entities/oferta.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      Usuario,
-      PerfilTrabajador,
-      SolicitudServicio,
-      SolicitudFoto,
-      Oferta,
-    ]),
+    TypeOrmModule.forFeature([Usuario, PerfilTrabajador, SolicitudServicio, SolicitudFoto, Oferta]),
   ],
   controllers: [SolicitudesController],
   providers: [SolicitudesService],

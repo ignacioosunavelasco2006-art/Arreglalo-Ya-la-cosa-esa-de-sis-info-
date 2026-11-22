@@ -1,5 +1,9 @@
+import { IsDateString, IsInt } from 'class-validator';
+
 export class CrearVisitaPreviaDto {
+  @IsInt()
   id_oferta: number;
-  id_trabajador: number;
-  fecha_propuesta: string; // fecha ISO
+
+  @IsDateString()
+  fecha_propuesta: string;
 }

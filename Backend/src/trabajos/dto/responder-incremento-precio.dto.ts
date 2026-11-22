@@ -1,4 +1,6 @@
+import { IsBoolean } from 'class-validator';
+
 export class ResponderIncrementoPrecioDto {
-  id_cliente: number;
+  @IsBoolean()
   aceptar: boolean;
 }

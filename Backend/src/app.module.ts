@@ -12,12 +12,21 @@ import { ReclamosModule } from './reclamos/reclamos.module';
 import { AuthModule } from './auth/auth.module';
 import { CatalogosModule } from './catalogos/catalogos.module';
 import { SistemaModule } from './sistema/sistema.module';
+import { ReportesModule } from './reportes/reportes.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { AdministracionModule } from './administracion/administracion.module';
+import { TareasModule } from './tareas/tareas.module';
+
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    UsuariosModule,
+    ScheduleModule.forRoot(),            // tareas programadas
+    TypeOrmModule.forRootAsync({  }),
+    
+    SistemaModule,                       
     AuthModule,
+    UsuariosModule,
     CatalogosModule,
     TrabajadoresModule,
     SolicitudesModule,
@@ -25,23 +34,10 @@ import { SistemaModule } from './sistema/sistema.module';
     PagosModule,
     CalificacionesModule,
     ReclamosModule,
-    SistemaModule,
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get<string>('DB_HOST'),
-        port: Number(configService.get<string>('DB_PORT')),
-        username: configService.get<string>('DB_USERNAME'),
-        password: configService.get<string>('DB_PASSWORD'),
-        database: configService.get<string>('DB_DATABASE'),
-        autoLoadEntities: true,
-        synchronize: false,
-      }),
-    }),
+    AdministracionModule,
+    ReportesModule,
+    TareasModule,
   ],
   controllers: [AppController],
-  providers: [],
 })
 export class AppModule {}

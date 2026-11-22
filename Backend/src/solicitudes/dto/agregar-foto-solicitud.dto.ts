@@ -1,4 +1,6 @@
+import { IsString, MaxLength, MinLength } from 'class-validator';
+
 export class AgregarFotoSolicitudDto {
-  id_solicitud: number;
+  @IsString() @MinLength(1) @MaxLength(300)
   ruta_archivo: string;
 }

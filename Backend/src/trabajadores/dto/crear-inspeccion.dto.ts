@@ -1,6 +1,10 @@
+import { IsDateString, IsInt } from 'class-validator';
+
+// CU-10 paso 1: 'el supervisor programa fecha e inspector'.
 export class CrearInspeccionDto {
-  id_trabajador: number;
-  id_supervisor: number;
+  @IsInt()
   id_inspector: number;
-  fecha_programada: string; // fecha ISO
+
+  @IsDateString()
+  fecha_programada: string;
 }

@@ -1,32 +1,33 @@
 import {
+  Body,
   Controller,
   Get,
-  Post,
-  Patch,
-  Body,
   Param,
   ParseIntPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 
 import { SistemaService } from './sistema.service';
-
 import { CrearParametroDto } from './dto/crear-parametro.dto';
 import { ActualizarParametroDto } from './dto/actualizar-parametro.dto';
-import { CrearNotificacionDto } from './dto/crear-notificacion.dto';
-import { ActualizarNotificacionDto } from './dto/actualizar-notificacion.dto';
-import { RegistrarAuditoriaDto } from './dto/registrar-auditoria.dto';
+
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @Controller('sistema')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class SistemaController {
-  constructor(
-    private readonly sistemaService: SistemaService,
-  ) {}
+  constructor(private readonly sistemaService: SistemaService) {}
 
-  @Post('parametros')
-  crearParametro(@Body() dto: CrearParametroDto) {
-    return this.sistemaService.crearParametro(dto);
-  }
+  // ---------- Parámetros (RF-34) ----------
 
+  // Lectura para cualquier usuario con sesión: comisión, anticipo y plazos
+  // deben ser transparentes (visión del informe).
   @Get('parametros')
   obtenerParametros() {
     return this.sistemaService.obtenerParametros();
@@ -37,48 +38,58 @@ export class SistemaController {
     return this.sistemaService.obtenerParametro(clave);
   }
 
+  @Roles('super_supervisor')
+  @Post('parametros')
+  crearParametro(
+    @Body() dto: CrearParametroDto,
+    @CurrentUser('id_usuario') idUsuario: number,
+  ) {
+    return this.sistemaService.crearParametro(dto, idUsuario);
+  }
+
+  @Roles('super_supervisor')
   @Patch('parametros/:clave')
   actualizarParametro(
     @Param('clave') clave: string,
     @Body() dto: ActualizarParametroDto,
+    @CurrentUser('id_usuario') idUsuario: number,
   ) {
-    return this.sistemaService.actualizarParametro(clave, dto);
+    return this.sistemaService.actualizarParametro(clave, dto, idUsuario);
   }
 
-  @Post('notificaciones')
-  crearNotificacion(@Body() dto: CrearNotificacionDto) {
-    return this.sistemaService.crearNotificacion(dto);
+  // ---------- Notificaciones (RF-35): siempre las del usuario del token ----------
+
+  @Get('notificaciones/mias')
+  misNotificaciones(@CurrentUser('id_usuario') idUsuario: number) {
+    return this.sistemaService.obtenerMias(idUsuario);
   }
 
-  @Get('notificaciones/usuario/:idUsuario')
-  obtenerNotificaciones(
-    @Param('idUsuario', ParseIntPipe) idUsuario: number,
-  ) {
-    return this.sistemaService.obtenerNotificaciones(idUsuario);
+  @Patch('notificaciones/leer-todas')
+  leerTodas(@CurrentUser('id_usuario') idUsuario: number) {
+    return this.sistemaService.marcarTodasLeidas(idUsuario);
   }
 
-  @Patch('notificaciones/:id')
-  actualizarNotificacion(
+  @Patch('notificaciones/:id/leer')
+  leer(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: ActualizarNotificacionDto,
+    @CurrentUser('id_usuario') idUsuario: number,
   ) {
-    return this.sistemaService.actualizarNotificacion(id, dto);
+    return this.sistemaService.marcarLeida(id, idUsuario);
   }
 
-  @Post('auditoria')
-  registrarAuditoria(@Body() dto: RegistrarAuditoriaDto) {
-    return this.sistemaService.registrarAuditoria(dto);
-  }
+  // ---------- Bitácora: solo lectura y solo super supervisor ----------
 
-  @Get('auditoria')
-  obtenerAuditoria() {
-    return this.sistemaService.obtenerAuditoria();
-  }
-
-  @Get('auditoria/usuario/:idUsuario')
-  obtenerAuditoriaPorUsuario(
-    @Param('idUsuario', ParseIntPipe) idUsuario: number,
+  @Roles('super_supervisor')
+  @Get('bitacora')
+  bitacora(
+    @Query('id_usuario') idUsuario?: string,
+    @Query('accion') accion?: string,
+    @Query('limite') limite?: string,
   ) {
-    return this.sistemaService.obtenerAuditoriaPorUsuario(idUsuario);
+    return this.sistemaService.obtenerAuditoria({
+      id_usuario: idUsuario ? Number(idUsuario) : undefined,
+      accion,
+      limite: limite ? Number(limite) : undefined,
+    });
   }
 }

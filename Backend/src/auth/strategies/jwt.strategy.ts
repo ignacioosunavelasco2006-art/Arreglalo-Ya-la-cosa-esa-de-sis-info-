@@ -33,8 +33,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       relations: { usuarioRoles: { rol: true } },
     });
 
-    if (!usuario || usuario.estado !== 'activa') {
-      throw new UnauthorizedException('La cuenta no está activa.');
+    if (!usuario || usuario.estado === 'eliminada') {
+      throw new UnauthorizedException('La cuenta no está disponible.');
     }
 
     return {
@@ -42,6 +42,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       correo: usuario.correo,
       nombres: usuario.nombres,
       apellidos: usuario.apellidos,
+      estado: usuario.estado,
       roles: usuario.usuarioRoles.map((ur) => ur.rol.nombre),
     };
   }
