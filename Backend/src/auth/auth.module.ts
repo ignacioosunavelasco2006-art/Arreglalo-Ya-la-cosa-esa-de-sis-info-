@@ -28,12 +28,12 @@ import { APP_GUARD } from '@nestjs/core';
     }),
   ],
   controllers: [AuthController],
-  providers: 
-  [
-    AuthService, JwtStrategy, RolesGuard,
+  providers: [
+    AuthService,
+    JwtStrategy,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
-  exports: [JwtAuthGuard, RolesGuard],
+  exports: [AuthService],
 })
 export class AuthModule {}
