@@ -9,9 +9,9 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 
-import { Pago } from '../entities/pagos.entity';
-import { Cancelacion } from '../entities/cacelacion.entity';
-import { Devolucion } from '../entities/devolucion.entities';
+import { Pago } from '../entities/pago.entity';
+import { Cancelacion } from '../entities/cancelacion.entity';
+import { Devolucion } from '../entities/devolucion.entity';
 import { IncidenteTrabajador } from '../entities/incidente-trabajador.entity';
 import { Trabajo } from '../entities/trabajo.entity';
 import { TrabajoHistorialEstado } from '../entities/trabajo-historial-estado.entity';
@@ -19,7 +19,7 @@ import { VistaTrabajosPrecioTotal } from '../entities/vista-trabajos-precio-tota
 
 import { SistemaService } from '../sistema/sistema.service';
 import { AdministracionService } from '../administracion/administracion.service';
-import { manejarErrorBd, redondear } from '../common/Utilidades';
+import { manejarErrorBd, redondear } from '../common/utilidades';
 
 import { RegistrarAnticipoDto } from './dto/registrar-anticipo.dto';
 import { RegistrarSaldoDto } from './dto/registrar-saldo.dto';

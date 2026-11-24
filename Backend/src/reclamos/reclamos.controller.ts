@@ -6,7 +6,7 @@ import { AgregarEvidenciaDto } from './dto/agregar-evidencia.dto';
 import { ResolverReclamoDto } from './dto/resolver-reclamo.dto';
 
 import { Roles } from '../auth/decorators/roles.decorator';
-import { CurrentUser, type UsuarioAutenticado } from '../auth/decorators/current-user.decorator';
+import { CurrentUser, UsuarioAutenticado } from '../auth/decorators/current-user.decorator';
 
 const SUPERVISION = ['supervisor', 'super_supervisor'] as const;
 

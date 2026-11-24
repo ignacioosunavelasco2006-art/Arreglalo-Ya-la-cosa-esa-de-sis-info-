@@ -22,9 +22,9 @@ import { TareasModule } from './tareas/tareas.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),            // tareas programadas
-    TypeOrmModule.forRootAsync({  }),
-    
-    SistemaModule,                       
+    TypeOrmModule.forRootAsync({ /* igual que ahora */ }),
+
+    SistemaModule,                       // @Global: notificar, auditar, parámetros
     AuthModule,
     UsuariosModule,
     CatalogosModule,

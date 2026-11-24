@@ -17,7 +17,7 @@ import { DatosBancarios } from '../entities/datos-bancarios.entity';
 
 import { SistemaService } from '../sistema/sistema.service';
 import { cifrar, descifrar } from '../common/cifrado';
-import { manejarErrorBd } from '../common/Utilidades';
+import { manejarErrorBd } from '../common/utilidades';
 
 import { CrearUsuarioDto } from './dto/crear-usuario.dto';
 import { CrearStaffDto } from './dto/crear-staff.dto';

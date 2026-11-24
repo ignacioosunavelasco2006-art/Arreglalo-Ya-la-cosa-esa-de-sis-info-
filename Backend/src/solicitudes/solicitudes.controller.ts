@@ -18,7 +18,7 @@ import { CrearOfertaDto } from './dto/crear-oferta.dto';
 import { ActualizarOfertaDto } from './dto/actualizar-oferta.dto';
 
 import { Roles } from '../auth/decorators/roles.decorator';
-import { CurrentUser, type UsuarioAutenticado } from '../auth/decorators/current-user.decorator';
+import { CurrentUser, UsuarioAutenticado } from '../auth/decorators/current-user.decorator';
 
 // ORDEN: rutas fijas primero ("mias", "disponibles", "ofertas/..."), ":id" al final.
 // Los ids de cliente y trabajador salen del token, nunca del body ni de la URL.

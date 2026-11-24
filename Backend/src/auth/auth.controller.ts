@@ -3,7 +3,7 @@ import { Body, Controller, Get, Post } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { IniciarSesionDto } from './dto/iniciar-sesion.dto';
 import { Public } from './decorators/public.decorator';
-import { CurrentUser, type UsuarioAutenticado } from './decorators/current-user.decorator';
+import { CurrentUser, UsuarioAutenticado } from './decorators/current-user.decorator';
 
 @Controller('auth')
 export class AuthController {

@@ -19,7 +19,7 @@ import { GuardarDatosBancariosDto } from './dto/datos-bancarios.dto';
 
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { CurrentUser, type UsuarioAutenticado } from '../auth/decorators/current-user.decorator';
+import { CurrentUser, UsuarioAutenticado } from '../auth/decorators/current-user.decorator';
 
 // Las rutas fijas (roles, mi-cuenta, supervisores) van ANTES de ':id'.
 @Controller('usuarios')

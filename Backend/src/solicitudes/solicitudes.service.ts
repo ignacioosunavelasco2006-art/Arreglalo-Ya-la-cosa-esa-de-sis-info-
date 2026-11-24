@@ -17,7 +17,7 @@ import { SolicitudFoto } from '../entities/solicitud-foto.entity';
 import { Oferta } from '../entities/oferta.entity';
 
 import { SistemaService } from '../sistema/sistema.service';
-import { manejarErrorBd } from '../common/Utilidades';
+import { manejarErrorBd } from '../common/utilidades';
 
 import { CrearSolicitudDto } from './dto/crear-solicitud.dto';
 import { ActualizarSolicitudDto } from './dto/actualizar-solicitud.dto';

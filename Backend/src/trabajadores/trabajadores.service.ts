@@ -18,7 +18,7 @@ import { Inspeccion } from '../entities/inspeccion.entity';
 
 import { SistemaService } from '../sistema/sistema.service';
 import { UsuariosService } from '../usuarios/usuarios.service';
-import { manejarErrorBd } from '../common/Utilidades';
+import { manejarErrorBd } from '../common/utilidades';
 
 import { CrearPerfilTrabajadorDto } from './dto/crear-perfil-trabajador.dto';
 import { ActualizarPerfilTrabajadorDto } from './dto/actualizar-perfil-trabajador.dto';
