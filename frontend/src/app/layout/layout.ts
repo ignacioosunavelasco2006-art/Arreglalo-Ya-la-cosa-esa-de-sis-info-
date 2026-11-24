@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { timer } from 'rxjs';
+import { timer } from '../../../node_modules/rxjs/dist/types';
 
 import { AuthService } from '../core/auth.service';
 import { MENU_POR_ROL, NOMBRE_ROL } from '../core/menu';

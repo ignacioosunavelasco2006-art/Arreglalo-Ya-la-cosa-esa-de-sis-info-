@@ -22,9 +22,21 @@ import { TareasModule } from './tareas/tareas.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),            // tareas programadas
-    TypeOrmModule.forRootAsync({ /* igual que ahora */ }),
-
-    SistemaModule,                       // @Global: notificar, auditar, parámetros
+  TypeOrmModule.forRootAsync({
+    inject: [ConfigService],
+    useFactory: (config: ConfigService) => ({
+      type: 'postgres',
+      host: config.get<string>('DB_HOST'),
+      port: parseInt(config.get<string>('DB_PORT') ?? '5432', 10),
+      username: config.get<string>('DB_USERNAME'),
+      password: config.get<string>('DB_PASSWORD'),
+      database: config.get<string>('DB_DATABASE'),
+      autoLoadEntities: true,
+      entities: [__dirname + '/entities/*.{entity,entities}.{ts,js}'],
+      synchronize: false,
+    }),
+  }),
+    SistemaModule,                       
     AuthModule,
     UsuariosModule,
     CatalogosModule,

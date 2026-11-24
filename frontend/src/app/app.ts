@@ -1,10 +1,12 @@
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 
-// Componente raíz: solo contiene el "hueco" donde se pintan las rutas.
 @Component({
-  selector: 'app-root',
   imports: [RouterOutlet],
-  template: `<router-outlet />`,
+  selector: 'app-root',
+  styleUrl: './app.css',
+  templateUrl: './app.html',
 })
-export class App {}
+export class App {
+  protected readonly title = signal('frontend');
+}
