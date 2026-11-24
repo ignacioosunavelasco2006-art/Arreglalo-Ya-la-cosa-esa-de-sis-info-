@@ -13,7 +13,7 @@ import { CalificacionInternaCliente } from '../entities/calificacion-interna-cli
 import { Trabajo } from '../entities/trabajo.entity';
 
 import { SistemaService } from '../sistema/sistema.service';
-import { manejarErrorBd } from '../common/Utilidades';
+import { manejarErrorBd } from '../common/utilidades';
 
 import { CrearCalificacionDto } from './dto/crear-calificacion.dto';
 import { ActualizarCalificacionDto } from './dto/actualizar-calificacion.dto';

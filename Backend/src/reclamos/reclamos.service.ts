@@ -17,7 +17,7 @@ import { SistemaService } from '../sistema/sistema.service';
 import { PagosService } from '../pagos/pagos.service';
 import { AdministracionService } from '../administracion/administracion.service';
 import { CalificacionesService } from '../calificaciones/calificaciones.service';
-import { manejarErrorBd } from '../common/Utilidades';
+import { manejarErrorBd } from '../common/utilidades';
 
 import { CrearReclamoDto } from './dto/crear-reclamo.dto';
 import { AgregarEvidenciaDto } from './dto/agregar-evidencia.dto';

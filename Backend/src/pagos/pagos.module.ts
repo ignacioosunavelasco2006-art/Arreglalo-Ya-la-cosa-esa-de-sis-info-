@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { Pago } from '../entities/pagos.entity';
-import { Cancelacion } from '../entities/cacelacion.entity';
-import { Devolucion } from '../entities/devolucion.entities';
+import { Pago } from '../entities/pago.entity';
+import { Cancelacion } from '../entities/cancelacion.entity';
+import { Devolucion } from '../entities/devolucion.entity';
 import { IncidenteTrabajador } from '../entities/incidente-trabajador.entity';
 import { Trabajo } from '../entities/trabajo.entity';
 import { TrabajoHistorialEstado } from '../entities/trabajo-historial-estado.entity';
