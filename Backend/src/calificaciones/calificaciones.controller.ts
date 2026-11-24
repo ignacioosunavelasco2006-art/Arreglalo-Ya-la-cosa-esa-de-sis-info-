@@ -7,7 +7,7 @@ import { ResponderCalificacionDto } from './dto/responder-calificacion.dto';
 import { CrearCalificacionInternaDto } from './dto/crear-calificacion-interna.dto';
 
 import { Roles } from '../auth/decorators/roles.decorator';
-import { CurrentUser, UsuarioAutenticado } from '../auth/decorators/current-user.decorator';
+import { CurrentUser, type UsuarioAutenticado } from '../auth/decorators/current-user.decorator';
 
 // Rutas fijas primero, ":id" al final.
 @Controller('calificaciones')

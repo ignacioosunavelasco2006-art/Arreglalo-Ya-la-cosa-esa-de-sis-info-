@@ -20,7 +20,7 @@ import { SolicitarFinalizacionDto } from './dto/solicitar-finalizacion.dto';
 import { ResponderFinalizacionDto } from './dto/responder-finalizacion.dto';
 
 import { Roles } from '../auth/decorators/roles.decorator';
-import { CurrentUser, UsuarioAutenticado } from '../auth/decorators/current-user.decorator';
+import { CurrentUser, type UsuarioAutenticado } from '../auth/decorators/current-user.decorator';
 
 const SUPERVISION = ['supervisor', 'super_supervisor'] as const;
 

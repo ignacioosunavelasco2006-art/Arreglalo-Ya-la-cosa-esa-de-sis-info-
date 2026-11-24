@@ -11,7 +11,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 
 import { ArchivoSubido, ArchivosService, TAMANO_MAXIMO } from './archivos.service';
-import { CurrentUser, UsuarioAutenticado } from '../auth/decorators/current-user.decorator';
+import { CurrentUser, type UsuarioAutenticado } from '../auth/decorators/current-user.decorator';
 
 // Sin @Public(): el guard global exige sesión para subir y para descargar.
 @Controller('archivos')
