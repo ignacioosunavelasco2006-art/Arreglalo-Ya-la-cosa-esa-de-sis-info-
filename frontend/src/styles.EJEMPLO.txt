@@ -1,6 +1,0 @@
-/* Agrega esta línea al INICIO de tu src/styles.css (después de: npm install bootstrap) */
-@import 'bootstrap/dist/css/bootstrap.min.css';
-
-body {
-  background-color: #f6f7f9;
-}
