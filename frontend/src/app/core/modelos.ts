@@ -310,3 +310,35 @@ export interface ArchivoSubido {
   nombre_original: string;
   tamano: number;
 }
+
+
+
+// ---------- Supervisión de trabajadores ----------
+
+export interface PerfilRevision {
+  id_usuario: number;
+  carnet_identidad: string;
+  descripcion: string | null;
+  anios_experiencia: number;
+  estado_verificacion: string;
+  motivo_rechazo: string | null;
+  calificacion_promedio: number;
+  total_calificaciones: number;
+  fecha_creacion?: string;
+}
+
+export interface PerfilRevisionDetalle extends PerfilRevision {
+  categorias: {
+    id_categoria: number;
+    nombre: string;
+    precio_estimado: number | null;
+  }[];
+
+  zonas: {
+    id_zona: number;
+    nombre: string;
+  }[];
+
+  documentos: DocumentoTrabajador[];
+  tiene_datos_bancarios: boolean;
+}

@@ -36,8 +36,21 @@ export const MENU_POR_ROL: Record<string, ItemMenu[]> = {
     { ruta: '/mi-cuenta', texto: 'Mi cuenta' },
   ],
   inspector: BASE,
-  supervisor: BASE,
-  super_supervisor: BASE,
+  
+  supervisor: [
+    { ruta: '/inicio', texto: 'Inicio' },
+    { ruta: '/supervisor/revision-trabajadores', texto: 'Revisión de trabajadores' },
+    { ruta: '/mi-cuenta', texto: 'Mi cuenta' },
+    { ruta: '/supervisor/catalogos', texto: 'Categorías y zonas' },
+  ],
+
+  super_supervisor: [
+    { ruta: '/inicio', texto: 'Inicio' },
+    { ruta: '/supervisor/revision-trabajadores', texto: 'Revisión de trabajadores' },
+    { ruta: '/mi-cuenta', texto: 'Mi cuenta' },
+    { ruta: '/supervisor/catalogos', texto: 'Categorías y zonas' },
+  ],
+
 };
 
 export const ACCESOS_POR_ROL: Record<string, Acceso[]> = {
@@ -56,18 +69,53 @@ export const ACCESOS_POR_ROL: Record<string, Acceso[]> = {
     { texto: 'Reclamos', descripcion: 'Reclamos sobre tus trabajos', ruta: '/reclamos-trabajador' },
   ],
   inspector: [{ texto: 'Mis inspecciones', descripcion: 'Visitas asignadas y resultados' }],
+  
   supervisor: [
-    { texto: 'Revisión de trabajadores', descripcion: 'Aprobar o rechazar perfiles' },
-    { texto: 'Reclamos', descripcion: 'Revisar y resolver casos' },
-    { texto: 'Categorías y zonas', descripcion: 'Administrar el catálogo' },
-    { texto: 'Reportes', descripcion: 'Trabajos, ingresos y flujo económico' },
+    {
+      texto: 'Revisión de trabajadores',
+      descripcion: 'Consultar documentos y aprobar perfiles',
+      ruta: '/supervisor/revision-trabajadores',
+    },
+    {
+      texto: 'Reclamos',
+      descripcion: 'Revisar y resolver casos',
+    },
+    {
+      texto: 'Categorías y zonas',
+      descripcion: 'Crear, editar, activar y desactivar servicios y zonas',
+      ruta: '/supervisor/catalogos',
+    },
+    {
+      texto: 'Reportes',
+      descripcion: 'Trabajos, ingresos y flujo económico',
+    },
   ],
+
+  
   super_supervisor: [
-    { texto: 'Parámetros del sistema', descripcion: 'Comisión, anticipo y plazos' },
-    { texto: 'Supervisores', descripcion: 'Crear cuentas internas' },
-    { texto: 'Bitácora', descripcion: 'Quién hizo qué y cuándo' },
-    { texto: 'Reportes', descripcion: 'Trabajos, ingresos y flujo económico' },
+    {
+      texto: 'Revisión de trabajadores',
+      descripcion: 'Consultar documentos y aprobar perfiles',
+      ruta: '/supervisor/revision-trabajadores',
+    },
+    {
+      texto: 'Parámetros del sistema',
+      descripcion: 'Comisión, anticipo y plazos',
+    },
+    {
+      texto: 'Supervisores',
+      descripcion: 'Crear cuentas internas',
+    },
+    {
+      texto: 'Bitácora',
+      descripcion: 'Consultar acciones del sistema',
+    },
+    {
+      texto: 'Reportes',
+      descripcion: 'Trabajos, ingresos y flujo económico',
+    },
   ],
+
 };
 
 export const NOMBRE_ROL: Record<string, string> = {
