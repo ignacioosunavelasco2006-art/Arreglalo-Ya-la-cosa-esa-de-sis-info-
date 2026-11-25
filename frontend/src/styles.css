@@ -1,1 +1,11 @@
-/* You can add global styles to this file, and also import other style files */
+@import 'bootstrap/dist/css/bootstrap.min.css';
+
+body {
+background-color: #0a2a5e;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+:root {
+  --bs-primary: #088388d0;
+  --bs-primary-rgb: 31, 111, 92;
+}

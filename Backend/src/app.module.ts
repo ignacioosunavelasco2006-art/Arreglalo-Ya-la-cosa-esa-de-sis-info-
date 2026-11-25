@@ -16,6 +16,7 @@ import { ReportesModule } from './reportes/reportes.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AdministracionModule } from './administracion/administracion.module';
 import { TareasModule } from './tareas/tareas.module';
+import { ArchivosModule } from './archivos/archivos.module';
 
 
 @Module({
@@ -49,6 +50,7 @@ import { TareasModule } from './tareas/tareas.module';
     AdministracionModule,
     ReportesModule,
     TareasModule,
+    ArchivosModule,
   ],
   controllers: [AppController],
 })
