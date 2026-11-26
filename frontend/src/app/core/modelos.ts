@@ -381,3 +381,74 @@ export interface Devolucion {
   fecha_aprobacion: string | null;
   fecha_procesamiento: string | null;
 }
+
+// Vista consolidada para el supervisor (filas crudas de la base de datos)
+export interface CasoReclamo {
+  reclamo: Reclamo;
+  evidencias: Evidencia[];
+  trabajo: {
+    id_trabajo: number;
+    id_cliente: number;
+    id_trabajador: number;
+    estado: string;
+    metodo_pago: string;
+    precio_final: string | number;
+    precio_total: number;
+    total_incrementos: number;
+    fecha_cierre: string | null;
+  };
+  historial: CambioEstado[];
+  incrementos: Incremento[];
+  finalizaciones: Finalizacion[];
+  pagos: Pago[];
+  devoluciones: Devolucion[];
+  calificacion: { puntaje: number; comentario: string | null; respuesta_trabajador: string | null } | null;
+}
+
+export interface Devolucion {
+  id_devolucion: number;
+  id_trabajo: number;
+  id_cliente: number;
+  id_reclamo: number | null;
+  id_pago: number | null;
+  monto: number;
+  motivo: string;
+  estado: string; // solicitada | aprobada | procesada | rechazada
+  motivo_rechazo: string | null;
+  fecha_solicitud: string;
+  fecha_aprobacion: string | null;
+  fecha_procesamiento: string | null;
+}
+
+export interface Incidente {
+  id_incidente: number;
+  id_trabajador: number;
+  id_trabajo: number;
+  tipo: string;
+  anulado: boolean;
+  id_supervisor_anula: number | null;
+  fecha: string;
+}
+
+export interface Suspension {
+  id_suspension: number;
+  id_usuario: number;
+  tipo: string; // voluntaria | automatica | sancion
+  motivo: string | null;
+  dias_duracion: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+  estado: string; // vigente | finalizada | levantada
+  id_reclamo: number | null;
+  id_supervisor: number | null;
+}
+
+export interface ItemBitacora {
+  id_bitacora: string;
+  id_usuario: number | null;
+  accion: string;
+  entidad: string | null;
+  id_entidad: number | null;
+  detalle: string | null;
+  fecha: string;
+}
