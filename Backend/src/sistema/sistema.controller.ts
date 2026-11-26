@@ -79,16 +79,20 @@ export class SistemaController {
 
   // ---------- Bitácora: solo lectura y solo super supervisor ----------
 
-  @Roles('super_supervisor')
+  @Roles('supervisor', 'super_supervisor')
   @Get('bitacora')
   bitacora(
     @Query('id_usuario') idUsuario?: string,
     @Query('accion') accion?: string,
     @Query('limite') limite?: string,
+    @Query('entidad') entidad?: string,
+    @Query('id_entidad') idEntidad?: string,
   ) {
     return this.sistemaService.obtenerAuditoria({
       id_usuario: idUsuario ? Number(idUsuario) : undefined,
       accion,
+      entidad,
+      id_entidad: idEntidad !== undefined ? Number(idEntidad) : undefined,
       limite: limite ? Number(limite) : undefined,
     });
   }

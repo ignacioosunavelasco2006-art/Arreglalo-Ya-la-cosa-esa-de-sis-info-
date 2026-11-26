@@ -343,6 +343,16 @@ export interface PerfilRevisionDetalle extends PerfilRevision {
   tiene_datos_bancarios: boolean;
 }
 
+export interface UsuarioLista {
+  id_usuario: number;
+  nombres: string;
+  apellidos: string;
+  correo: string;
+  telefono: string;
+  estado: string;
+  fecha_registro: string;
+  roles: string[];
+}
 
 export interface Reclamo {
   id_reclamo: number;

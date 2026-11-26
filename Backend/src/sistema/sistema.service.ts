@@ -251,12 +251,14 @@ export class SistemaService {
   // BITÁCORA (solo lectura: una auditoría editable no sirve)
   // ---------------------------------------------------------------
 
-  obtenerAuditoria(filtros: { id_usuario?: number; accion?: string; limite?: number }) {
+  obtenerAuditoria(filtros: { id_usuario?: number;  accion?: string; entidad?: string; id_entidad?: number; limite?: number }) {
     const limite = Math.min(Math.max(filtros.limite ?? 200, 1), 1000);
     return this.auditoriaRepository.find({
       where: {
         ...(filtros.id_usuario !== undefined ? { id_usuario: filtros.id_usuario } : {}),
         ...(filtros.accion ? { accion: filtros.accion } : {}),
+        ...(filtros.entidad ? { entidad: filtros.entidad } : {}),
+        ...(filtros.id_entidad !== undefined ? { id_entidad: filtros.id_entidad } : {}),
       },
       order: { fecha: 'DESC' },
       take: limite,
