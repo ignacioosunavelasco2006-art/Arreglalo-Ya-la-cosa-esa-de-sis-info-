@@ -15,6 +15,7 @@ import { EstadoBadge } from '../../shared/estado-badge';
   selector: 'app-reclamos-lista',
   imports: [RouterLink, DatePipe, FormsModule, EstadoBadge],
   template: `
+    <a routerLink="/inicio" class="small">&larr; Volver al inicio</a>
     <h1 class="h3 mb-3">Reclamos</h1>
 
     <div class="mb-3" style="max-width: 16rem">

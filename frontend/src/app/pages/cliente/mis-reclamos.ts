@@ -12,6 +12,8 @@ import { EstadoBadge } from '../../shared/estado-badge';
   selector: 'app-mis-reclamos',
   imports: [RouterLink, DatePipe, CurrencyPipe, EstadoBadge],
   template: `
+  <div class="page-heading">
+    <a routerLink="/inicio" class="small">&larr; Volver al inicio</a>
     <h1 class="h3 mb-3">Mis reclamos y devoluciones</h1>
 
     @if (cargando()) {
@@ -55,6 +57,7 @@ import { EstadoBadge } from '../../shared/estado-badge';
         <div class="card"><div class="card-body text-center text-muted">No tienes devoluciones.</div></div>
       }
     }
+  </div>
   `,
 })
 export class MisReclamos {

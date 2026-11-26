@@ -15,6 +15,7 @@ import { EstadoBadge } from '../shared/estado-badge';
   selector: 'app-mis-trabajos',
   imports: [RouterLink, DatePipe, CurrencyPipe, FormsModule, EstadoBadge],
   template: `
+    <a routerLink="/inicio" class="small">&larr; Volver al inicio</a>
     <h1 class="h3 mb-3">Mis trabajos</h1>
 
     <div class="mb-3" style="max-width: 16rem">
@@ -54,6 +55,15 @@ import { EstadoBadge } from '../shared/estado-badge';
                 <td>{{ t.fecha_inicio_prog ? (t.fecha_inicio_prog | date: 'dd/MM/yyyy HH:mm') : '—' }}</td>
                 <td class="text-end">
                   <a class="btn btn-sm btn-outline-primary" [routerLink]="['/trabajos', t.id_trabajo]">Ver</a>
+                  @if (t.estado === 'terminado' && rolEn(t) === 'Cliente') {
+                    <a
+                      class="btn btn-sm btn-outline-danger ms-1"
+                      [routerLink]="['/reclamos/nuevo']"
+                      [queryParams]="{ trabajo: t.id_trabajo }">
+                      Presentar reclamo
+                    </a>
+                  
+                }
                 </td>
               </tr>
             }

@@ -25,6 +25,7 @@ export const MENU_POR_ROL: Record<string, ItemMenu[]> = {
     { ruta: '/trabajos', texto: 'Mis trabajos' },
     { ruta: '/catalogos', texto: 'Servicios y zonas' },
     { ruta: '/mi-cuenta', texto: 'Mi cuenta' },
+    { ruta: '/reclamos', texto: 'Mis reclamos' },
   ],
   trabajador: [
     { ruta: '/inicio', texto: 'Inicio' },
@@ -34,6 +35,7 @@ export const MENU_POR_ROL: Record<string, ItemMenu[]> = {
     { ruta: '/calendario', texto: 'Calendario' },
     { ruta: '/mi-perfil', texto: 'Mi perfil' },
     { ruta: '/mi-cuenta', texto: 'Mi cuenta' },
+    { ruta: '/reclamos-trabajador', texto: 'Reclamos' },
   ],
   inspector: BASE,
   
@@ -42,6 +44,8 @@ export const MENU_POR_ROL: Record<string, ItemMenu[]> = {
     { ruta: '/supervisor/revision-trabajadores', texto: 'Revisión de trabajadores' },
     { ruta: '/mi-cuenta', texto: 'Mi cuenta' },
     { ruta: '/supervisor/catalogos', texto: 'Categorías y zonas' },
+    { ruta: '/supervisor/reclamos', texto: 'Reclamos' },
+    { ruta: '/supervisor/bitacora', texto: 'Bitácora' },
   ],
 
   super_supervisor: [
@@ -58,7 +62,7 @@ export const ACCESOS_POR_ROL: Record<string, Acceso[]> = {
     { texto: 'Publicar solicitud', descripcion: 'Describe tu problema y recibe ofertas', ruta: '/solicitudes/nueva' },
     { texto: 'Mis solicitudes', descripcion: 'Revisa las ofertas que recibiste', ruta: '/solicitudes' },
     { texto: 'Mis trabajos', descripcion: 'Pagos, avances y finalización', ruta: '/trabajos' },
-    { texto: 'Mis reclamos', descripcion: 'Reclama dentro de los 7 días' },
+    { texto: 'Mis reclamos', descripcion: 'Consulta tus reclamos y devoluciones', ruta: '/reclamos' },
   ],
   trabajador: [
     { texto: 'Mi perfil', descripcion: 'Documentos, habilidades, zonas y datos bancarios', ruta: '/mi-perfil' },
@@ -77,10 +81,6 @@ export const ACCESOS_POR_ROL: Record<string, Acceso[]> = {
       ruta: '/supervisor/revision-trabajadores',
     },
     {
-      texto: 'Reclamos',
-      descripcion: 'Revisar y resolver casos',
-    },
-    {
       texto: 'Categorías y zonas',
       descripcion: 'Crear, editar, activar y desactivar servicios y zonas',
       ruta: '/supervisor/catalogos',
@@ -88,6 +88,16 @@ export const ACCESOS_POR_ROL: Record<string, Acceso[]> = {
     {
       texto: 'Reportes',
       descripcion: 'Trabajos, ingresos y flujo económico',
+    },
+    {
+      texto: 'Reclamos',
+      descripcion: 'Consultar reclamos y filtrar por estado',
+      ruta: '/supervisor/reclamos',
+    },
+    {
+      texto: 'Bitácora',
+      descripcion: 'Consultar las acciones registradas sobre los reclamos',
+      ruta: '/supervisor/bitacora',
     },
   ],
 
@@ -113,6 +123,16 @@ export const ACCESOS_POR_ROL: Record<string, Acceso[]> = {
     {
       texto: 'Reportes',
       descripcion: 'Trabajos, ingresos y flujo económico',
+    },
+    {
+      texto: 'Reclamos',
+      descripcion: 'Consultar reclamos y filtrar por estado',
+      ruta: '/supervisor/reclamos',
+    },
+    {
+      texto: 'Bitácora',
+      descripcion: 'Consultar las acciones registradas sobre los reclamos',
+      ruta: '/supervisor/bitacora',
     },
   ],
 

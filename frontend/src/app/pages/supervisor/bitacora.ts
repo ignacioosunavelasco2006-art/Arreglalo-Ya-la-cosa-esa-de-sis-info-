@@ -13,6 +13,7 @@ import { mapaNombres } from '../../core/nombres';
   selector: 'app-bitacora',
   imports: [DatePipe, ReactiveFormsModule],
   template: `
+    <a routerLink="/inicio" class="small">&larr; Volver al inicio</a>
     <h1 class="h3 mb-1">Bitácora de auditoría</h1>
     <p class="text-muted small">Registro inalterable de acciones importantes: inicios de sesión, precios, pagos, reclamos, sanciones y cambios de parámetros.</p>
 
