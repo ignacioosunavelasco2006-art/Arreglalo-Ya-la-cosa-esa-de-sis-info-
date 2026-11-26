@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 
 import { API_URL } from './config';
-import { ItemBitacora, Parametro, UsuarioLista } from './modelos';
+import { ItemBitacora, UsuarioLista } from './modelos';
 
 export type TipoReporte = 'trabajos' | 'ingresos' | 'calificaciones' | 'reclamos' | 'cancelaciones' | 'flujo-economico';
 
