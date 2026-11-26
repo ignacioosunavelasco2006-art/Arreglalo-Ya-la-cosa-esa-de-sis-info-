@@ -342,3 +342,42 @@ export interface PerfilRevisionDetalle extends PerfilRevision {
   documentos: DocumentoTrabajador[];
   tiene_datos_bancarios: boolean;
 }
+
+
+export interface Reclamo {
+  id_reclamo: number;
+  id_trabajo: number;
+  id_cliente: number;
+  id_supervisor: number | null;
+  descripcion: string;
+  estado: string; // abierto | en_revision | resuelto | improcedente
+  resolucion: string | null;
+  escalado_super: boolean;
+  fecha_reclamo: string;
+  fecha_resolucion: string | null;
+}
+
+export interface Evidencia {
+  id_evidencia: number;
+  id_reclamo: number;
+  ruta_archivo: string;
+}
+
+export interface ReclamoConEvidencias extends Reclamo {
+  evidencias: Evidencia[];
+}
+
+export interface Devolucion {
+  id_devolucion: number;
+  id_trabajo: number;
+  id_cliente: number;
+  id_reclamo: number | null;
+  id_pago: number | null;
+  monto: number;
+  motivo: string;
+  estado: string; // solicitada | aprobada | procesada | rechazada
+  motivo_rechazo: string | null;
+  fecha_solicitud: string;
+  fecha_aprobacion: string | null;
+  fecha_procesamiento: string | null;
+}
