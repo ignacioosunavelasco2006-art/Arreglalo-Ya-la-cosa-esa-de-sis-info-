@@ -1,6 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 
 import { AdminService } from '../../core/admin.service';
@@ -11,7 +12,7 @@ import { mapaNombres } from '../../core/nombres';
 // RNF-07 / sección 8.18: quién hizo qué y cuándo. Es de solo lectura: nadie puede editarla.
 @Component({
   selector: 'app-bitacora',
-  imports: [DatePipe, ReactiveFormsModule],
+  imports: [DatePipe, ReactiveFormsModule, RouterLink],
   template: `
     <a routerLink="/inicio" class="small">&larr; Volver al inicio</a>
     <h1 class="h3 mb-1">Bitácora de auditoría</h1>
@@ -24,6 +25,24 @@ import { mapaNombres } from '../../core/nombres';
           <option [ngValue]="0">Todos</option>
           @for (u of usuarios(); track u.id_usuario) { <option [ngValue]="u.id_usuario">{{ u.nombres }} {{ u.apellidos }}</option> }
         </select>
+      <div class="col-sm-3">
+        <label class="form-label small mb-1" for="entidad">Entidad</label>
+        <select id="entidad" class="form-select form-select-sm" formControlName="entidad">
+            <option value="">Todas</option>
+            <option value="reclamos">Reclamos</option>
+        </select>
+      </div>
+
+      <div class="col-sm-3">
+        <label class="form-label small mb-1" for="id_entidad">N.º de reclamo</label>
+        <input
+            id="id_entidad"
+            type="number"
+            min="1"
+            class="form-control form-control-sm"
+            formControlName="id_entidad"
+            placeholder="Todos los reclamos" />
+      </div>
       </div>
       <div class="col-sm-4">
         <label class="form-label small mb-1" for="accion">Acción (texto exacto)</label>

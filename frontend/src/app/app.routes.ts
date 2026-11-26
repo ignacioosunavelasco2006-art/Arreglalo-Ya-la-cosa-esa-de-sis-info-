@@ -134,19 +134,29 @@ export const routes: Routes = [
           import('./pages/supervisor/revision-trabajadores')
             .then((m) => m.RevisionTrabajadores),
       },
+      {
+        path: 'supervisor/reclamos',
+        canActivate: [rolGuard('supervisor', 'super_supervisor')],
+        children: [
+          {
+            path: '',
+            loadComponent: () =>
+              import('./pages/supervisor/reclamos-lista').then((m) => m.ReclamosLista),
+          },
+          {
+            path: ':id',
+            loadComponent: () =>
+              import('./pages/supervisor/reclamo-caso').then((m) => m.ReclamoCaso),
+          },
+        ],
+      },
+      {
+        path: 'supervisor/bitacora',
+        canActivate: [rolGuard('supervisor', 'super_supervisor')],
+        loadComponent: () =>
+          import('./pages/supervisor/bitacora').then((m) => m.Bitacora),
+      },
     ],
-  },
-  {
-    path: 'supervisor/reclamos',
-    canActivate: [rolGuard('supervisor', 'super_supervisor')],
-    loadComponent: () =>
-      import('./pages/supervisor/reclamos-lista').then((m) => m.ReclamosLista),
-  },
-  {
-    path: 'supervisor/bitacora',
-    canActivate: [rolGuard('supervisor', 'super_supervisor')],
-    loadComponent: () =>
-      import('./pages/supervisor/bitacora').then((m) => m.Bitacora),
   },
 
 
