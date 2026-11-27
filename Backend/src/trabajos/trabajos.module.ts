@@ -15,6 +15,7 @@ import { VisitaPrevia } from '../entities/visita-previa.entity';
 import { IncrementoPrecio } from '../entities/incremento-precio.entity';
 import { SolicitudFinalizacion } from '../entities/solicitud-finalizacion.entity';
 import { VistaTrabajosPrecioTotal } from '../entities/vista-trabajos-precio-total.entity';
+import { ReprogramacionTrabajo } from '../entities/reprogramacion-trabajo.entity';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { VistaTrabajosPrecioTotal } from '../entities/vista-trabajos-precio-tota
       IncrementoPrecio,
       SolicitudFinalizacion,
       VistaTrabajosPrecioTotal,
+      ReprogramacionTrabajo,
     ]),
   ],
   controllers: [TrabajosController],
