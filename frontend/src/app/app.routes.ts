@@ -1,13 +1,10 @@
+
 import { Routes } from '@angular/router';
 
 import { authGuard, invitadoGuard, rolGuard } from './core/guards';
 import { Layout } from './layout/layout';
 
-// Mapa de URLs -> pantallas.
-// loadComponent = "carga perezosa": la pantalla se descarga solo cuando alguien entra a ella.
-// ORDEN: dentro de un grupo, las rutas fijas ("nueva") van antes que las que llevan parámetro (":id").
 export const routes: Routes = [
-  // Públicas (solo para quien NO ha iniciado sesión)
   {
     path: 'login',
     canActivate: [invitadoGuard],
@@ -18,8 +15,6 @@ export const routes: Routes = [
     canActivate: [invitadoGuard],
     loadComponent: () => import('./pages/registro').then((m) => m.Registro),
   },
-
-  // Privadas: todas dentro del Layout (barra superior) y protegidas por authGuard
   {
     path: '',
     component: Layout,
@@ -30,27 +25,18 @@ export const routes: Routes = [
       { path: 'catalogos', loadComponent: () => import('./pages/catalogos').then((m) => m.Catalogos) },
       { path: 'mi-cuenta', loadComponent: () => import('./pages/mi-cuenta').then((m) => m.MiCuenta) },
 
-      // ---------- Cliente ----------
+      // Cliente
       {
         path: 'solicitudes',
         canActivate: [rolGuard('cliente')],
         children: [
-          {
-            path: '',
-            loadComponent: () => import('./pages/cliente/mis-solicitudes').then((m) => m.MisSolicitudes),
-          },
-          {
-            path: 'nueva',
-            loadComponent: () => import('./pages/cliente/nueva-solicitud').then((m) => m.NuevaSolicitud),
-          },
-          {
-            path: ':id',
-            loadComponent: () => import('./pages/cliente/solicitud-detalle').then((m) => m.SolicitudDetalle),
-          },
+          { path: '', loadComponent: () => import('./pages/cliente/mis-solicitudes').then((m) => m.MisSolicitudes) },
+          { path: 'nueva', loadComponent: () => import('./pages/cliente/nueva-solicitud').then((m) => m.NuevaSolicitud) },
+          { path: ':id', loadComponent: () => import('./pages/cliente/solicitud-detalle').then((m) => m.SolicitudDetalle) },
         ],
       },
 
-      // ---------- Trabajador ----------
+      // Trabajador
       {
         path: 'mi-perfil',
         canActivate: [rolGuard('trabajador')],
@@ -60,15 +46,8 @@ export const routes: Routes = [
         path: 'oportunidades',
         canActivate: [rolGuard('trabajador')],
         children: [
-          {
-            path: '',
-            loadComponent: () => import('./pages/trabajador/oportunidades').then((m) => m.Oportunidades),
-          },
-          {
-            path: ':id',
-            loadComponent: () =>
-              import('./pages/trabajador/oportunidad-detalle').then((m) => m.OportunidadDetalle),
-          },
+          { path: '', loadComponent: () => import('./pages/trabajador/oportunidades').then((m) => m.Oportunidades) },
+          { path: ':id', loadComponent: () => import('./pages/trabajador/oportunidad-detalle').then((m) => m.OportunidadDetalle) },
         ],
       },
       {
@@ -84,11 +63,10 @@ export const routes: Routes = [
       {
         path: 'reclamos-trabajador',
         canActivate: [rolGuard('trabajador')],
-        loadComponent: () =>
-          import('./pages/trabajador/reclamos-trabajador').then((m) => m.ReclamosTrabajador),
+        loadComponent: () => import('./pages/trabajador/reclamos-trabajador').then((m) => m.ReclamosTrabajador),
       },
 
-      // ---------- Trabajos (cliente y trabajador) ----------
+      // Trabajos
       {
         path: 'trabajos',
         canActivate: [rolGuard('cliente', 'trabajador')],
@@ -98,42 +76,36 @@ export const routes: Routes = [
         ],
       },
 
-      // ---------- Perfil público de un trabajador (cualquier usuario con sesión) ----------
+      // Perfil público
       {
         path: 'trabajadores/:id',
         loadComponent: () => import('./pages/perfil-trabajador').then((m) => m.PerfilTrabajador),
       },
 
-      
-// ---------- Supervisor ----------
-{
-  path: 'supervisor/revision-trabajadores',
-  canActivate: [rolGuard('supervisor', 'super_supervisor')],
+      // Supervisor
+      {
+        path: 'supervisor',
+        canActivate: [rolGuard('supervisor', 'super_supervisor')],
+        children: [
+          {
+            path: 'revision-trabajadores',
+            loadComponent: () =>
+              import('./pages/supervisor/revision-trabajadores').then((m) => m.RevisionTrabajadores),
+          },
+          {
+            path: 'catalogos',
+            loadComponent: () =>
+              import('./pages/supervisor/catalogos-admin').then((m) => m.CatalogosAdmin),
+          },
+         {
+  path: 'clasificacion-trabajadores',
   loadComponent: () =>
-    import('./pages/supervisor/revision-trabajadores')
-      .then((m) => m.RevisionTrabajadores),
+    import('./pages/supervisor/clasificacion-trabajadores')
+      .then((m) => m.ClasificacionTrabajadores),
 },
-
+        ],
+      },
     ],
   },
-
-
-
-// ---------- Supervisor ----------
-{
-  path: 'supervisor/revision-trabajadores',
-  canActivate: [rolGuard('supervisor', 'super_supervisor')],
-  loadComponent: () =>
-    import('./pages/supervisor/revision-trabajadores')
-      .then((m) => m.RevisionTrabajadores),
-},
-{
-  path: 'supervisor/catalogos',
-  canActivate: [rolGuard('supervisor', 'super_supervisor')],
-  loadComponent: () =>
-    import('./pages/supervisor/catalogos-admin')
-      .then((m) => m.CatalogosAdmin),
-},
   { path: '**', redirectTo: '' },
 ];
-

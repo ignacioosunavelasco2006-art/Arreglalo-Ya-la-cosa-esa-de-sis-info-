@@ -356,4 +356,110 @@ export class AdministracionService {
       await this.sistema.auditar(null, 'cuenta_eliminada_inactividad', 'usuarios', id_usuario);
     }
   }
+  
+  async obtenerClasificacion(idTrabajador: number) {
+    const umbral = Math.round(
+      await this.sistema.obtenerNumero('umbral_incidentes', 3),
+    );
+
+    const resultado = await this.dataSource.query(
+      `SELECT
+         COUNT(*)::int AS cantidad_incidentes,
+         COUNT(*) FILTER (
+           WHERE tipo = 'atraso'
+         )::int AS atrasos,
+         COUNT(*) FILTER (
+           WHERE tipo = 'cancelacion'
+         )::int AS cancelaciones,
+         COUNT(*) FILTER (
+           WHERE tipo = 'reclamo'
+         )::int AS reclamos
+       FROM incidentes_trabajador
+       WHERE id_trabajador = $1
+         AND anulado = false
+         AND fecha >= NOW() - INTERVAL '90 days'`,
+      [idTrabajador],
+    );
+
+    const datos = resultado[0];
+    const cantidad = Number(datos.cantidad_incidentes);
+
+    const reincidencias = await this.dataSource.query(
+      `SELECT tipo, COUNT(*)::int AS cantidad
+       FROM incidentes_trabajador
+       WHERE id_trabajador = $1
+         AND anulado = false
+         AND fecha >= NOW() - INTERVAL '90 days'
+       GROUP BY tipo
+       HAVING COUNT(*) >= 2`,
+      [idTrabajador],
+    );
+
+    const esReincidente = reincidencias.length > 0;
+
+    let clasificacion = 'normal';
+
+    if (cantidad >= umbral) {
+      clasificacion = 'critico';
+    } else if (esReincidente) {
+      clasificacion = 'reincidente';
+    } else if (cantidad > 0) {
+      clasificacion = 'observacion';
+    }
+
+    return {
+      id_trabajador: idTrabajador,
+      cantidad_incidentes: cantidad,
+      atrasos: Number(datos.atrasos),
+      cancelaciones: Number(datos.cancelaciones),
+      reclamos: Number(datos.reclamos),
+      puntaje: cantidad,
+      umbral,
+      es_reincidente: esReincidente,
+      clasificacion,
+      periodo_dias: 90,
+      fecha_evaluacion: new Date(),
+    };
+  }
+
+  async registrarHistorialClasificacion(
+  idTrabajador: number,
+  idUsuarioEvaluador: number | null = null,
+) {
+  const resultado = await this.obtenerClasificacion(idTrabajador);
+
+  await this.dataSource.query(
+    `INSERT INTO incidente_clasificacion_historial
+    (
+      id_trabajador,
+      puntaje,
+      clasificacion,
+      es_reincidente,
+      cantidad_incidentes,
+      periodo_dias,
+      id_usuario_evaluador
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [
+      resultado.id_trabajador,
+      resultado.puntaje,
+      resultado.clasificacion,
+      resultado.es_reincidente,
+      resultado.cantidad_incidentes,
+      resultado.periodo_dias,
+      idUsuarioEvaluador,
+    ],
+  );
+
+  return resultado;
+}
+async obtenerHistorialClasificacion(idTrabajador: number) {
+  return this.dataSource.query(
+    `SELECT *
+       FROM incidente_clasificacion_historial
+      WHERE id_trabajador = $1
+      ORDER BY fecha_evaluacion DESC`,
+    [idTrabajador],
+  );
+}
 }

@@ -26,6 +26,13 @@ const RANGOS: Record<string, [number, number]> = {
   dias_devolucion: [1, 15],
   horas_cancelacion: [0, 72],
   dias_vigencia_solicitud: [1, 90],
+  incidentes_periodo_dias: [1, 365],
+  puntos_atraso: [1, 10],
+  puntos_cancelacion: [1, 10],
+  puntos_reclamo: [1, 10],
+  umbral_clasificacion_moderada: [1, 100],
+  umbral_clasificacion_grave: [2, 200],
+  umbral_reincidencia: [1, 100],
 };
 
 @Injectable()

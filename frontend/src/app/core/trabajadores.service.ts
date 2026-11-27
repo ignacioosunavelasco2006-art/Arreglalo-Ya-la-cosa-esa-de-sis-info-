@@ -1,5 +1,5 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
 
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 
 import { API_URL } from './config';
@@ -13,33 +13,41 @@ import {
 export class TrabajadoresService {
   private http = inject(HttpClient);
 
-  // Perfil público (sin carnet ni documentos)
+  listarParaClasificacion() {
+    return this.http.get<{
+      resultados: {
+        id_usuario: number;
+        nombres: string;
+        apellidos: string;
+      }[];
+    }>(`${API_URL}/trabajadores`);
+  }
+
   perfil(id: number) {
-    return this.http.get<PerfilPublico>(`${API_URL}/trabajadores/${id}`);
+    return this.http.get<PerfilPublico>(
+      `${API_URL}/trabajadores/${id}`,
+    );
   }
 
-  // SUPERVISIÓN: lista de trabajadores pendientes u observados
   colaRevision(estado?: string) {
-  let params = new HttpParams();
+    let params = new HttpParams();
 
-  if (estado) {
-    params = params.set('estado', estado);
+    if (estado) {
+      params = params.set('estado', estado);
+    }
+
+    return this.http.get<PerfilRevision[]>(
+      `${API_URL}/trabajadores/revision`,
+      { params },
+    );
   }
 
-  return this.http.get<PerfilRevision[]>(
-    `${API_URL}/trabajadores/revision`,
-    { params },
-  );
-}
-
-  // SUPERVISIÓN: detalle privado del trabajador
   detalleRevision(id: number) {
     return this.http.get<PerfilRevisionDetalle>(
       `${API_URL}/trabajadores/${id}/detalle`,
     );
   }
 
-  // SUPERVISIÓN: aprobar, observar o rechazar
   revisar(
     id: number,
     estado: 'aprobado' | 'observado' | 'rechazado',

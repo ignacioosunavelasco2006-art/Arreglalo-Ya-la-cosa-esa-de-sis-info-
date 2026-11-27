@@ -42,6 +42,16 @@ export class AdministracionController {
     );
   }
 
+  // ---------- Clasificación de trabajadores ----------
+
+@Roles('supervisor', 'super_supervisor')
+@Get('trabajadores/:id/clasificacion')
+obtenerClasificacion(
+  @Param('id', ParseIntPipe) id: number,
+) {
+  return this.administracionService.obtenerClasificacion(id);
+}
+
   @Roles('supervisor', 'super_supervisor')
   @Patch('incidentes/:id/anular')
   anularIncidente(
