@@ -29,8 +29,29 @@ export const routes: Routes = [
       { path: 'inicio', loadComponent: () => import('./pages/inicio').then((m) => m.Inicio) },
       { path: 'catalogos', loadComponent: () => import('./pages/catalogos').then((m) => m.Catalogos) },
       { path: 'mi-cuenta', loadComponent: () => import('./pages/mi-cuenta').then((m) => m.MiCuenta) },
-
+      
       // ---------- Cliente ----------
+      {
+        path: 'reclamos',
+        canActivate: [rolGuard('cliente')],
+        children: [
+          {
+            path: '',
+            loadComponent: () =>
+              import('./pages/cliente/mis-reclamos').then((m) => m.MisReclamos),
+          },
+          {
+            path: 'nuevo',
+            loadComponent: () =>
+              import('./pages/cliente/reclamo-nuevo').then((m) => m.ReclamoNuevo),
+          },
+          {
+            path: ':id',
+            loadComponent: () =>
+              import('./pages/cliente/reclamo-detalle').then((m) => m.ReclamoDetalle),
+          },
+        ],
+      },
       {
         path: 'solicitudes',
         canActivate: [rolGuard('cliente')],
@@ -106,17 +127,37 @@ export const routes: Routes = [
 
       
 // ---------- Supervisor ----------
-{
-  path: 'supervisor/revision-trabajadores',
-  canActivate: [rolGuard('supervisor', 'super_supervisor')],
-  loadComponent: () =>
-    import('./pages/supervisor/revision-trabajadores')
-      .then((m) => m.RevisionTrabajadores),
-},
-
+      {
+        path: 'supervisor/revision-trabajadores',
+        canActivate: [rolGuard('supervisor', 'super_supervisor')],
+        loadComponent: () =>
+          import('./pages/supervisor/revision-trabajadores')
+            .then((m) => m.RevisionTrabajadores),
+      },
+      {
+        path: 'supervisor/reclamos',
+        canActivate: [rolGuard('supervisor', 'super_supervisor')],
+        children: [
+          {
+            path: '',
+            loadComponent: () =>
+              import('./pages/supervisor/reclamos-lista').then((m) => m.ReclamosLista),
+          },
+          {
+            path: ':id',
+            loadComponent: () =>
+              import('./pages/supervisor/reclamo-caso').then((m) => m.ReclamoCaso),
+          },
+        ],
+      },
+      {
+        path: 'supervisor/bitacora',
+        canActivate: [rolGuard('supervisor', 'super_supervisor')],
+        loadComponent: () =>
+          import('./pages/supervisor/bitacora').then((m) => m.Bitacora),
+      },
     ],
   },
-
 
 
 // ---------- Supervisor ----------

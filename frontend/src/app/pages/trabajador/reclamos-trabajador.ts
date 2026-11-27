@@ -11,7 +11,8 @@ import { EstadoBadge } from '../../shared/estado-badge';
 @Component({
   selector: 'app-reclamos-trabajador',
   imports: [DatePipe, RouterLink, EstadoBadge],
-  template: `
+  template: `'
+    <a routerLink="/inicio" class="small">&larr; Volver al inicio</a>
     <h1 class="h3 mb-3">Reclamos sobre mis trabajos</h1>
 
     @if (cargando()) {

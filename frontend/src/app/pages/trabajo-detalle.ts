@@ -132,10 +132,15 @@ const ESTADOS_CANCELABLES = ['pendiente_anticipo', 'programado', 'en_camino'];
         }
 
         @if (t.estado === 'terminado') {
-          <div class="alert alert-light border small">
-            Tienes 7 días desde el cierre del trabajo para presentar un reclamo si hubo problemas.
-            <span class="text-muted">(La pantalla de reclamos se agrega en la siguiente entrega.)</span>
-          </div>
+          <a
+            class="btn btn-outline-danger btn-sm"
+            [routerLink]="['/reclamos/nuevo']"
+            [queryParams]="{ trabajo: t.id_trabajo }">
+            Presentar reclamo
+          </a>
+          <p class="small text-muted mt-2">
+            Tienes 7 días desde el cierre del trabajo para presentar un reclamo.
+          </p>
         }
       } @else if (t.estado === 'pendiente_anticipo') {
         <div class="alert alert-warning">Esperando que el cliente pague el anticipo.</div>
