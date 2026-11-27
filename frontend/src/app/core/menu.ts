@@ -32,6 +32,7 @@ export const MENU_POR_ROL: Record<string, ItemMenu[]> = {
     { ruta: '/mis-ofertas', texto: 'Mis ofertas' },
     { ruta: '/trabajos', texto: 'Mis trabajos' },
     { ruta: '/calendario', texto: 'Calendario' },
+    { ruta: '/rendimiento', texto: 'Mi rendimiento' },
     { ruta: '/mi-perfil', texto: 'Mi perfil' },
     { ruta: '/mi-cuenta', texto: 'Mi cuenta' },
   ],
@@ -40,6 +41,7 @@ export const MENU_POR_ROL: Record<string, ItemMenu[]> = {
   supervisor: [
     { ruta: '/inicio', texto: 'Inicio' },
     { ruta: '/supervisor/revision-trabajadores', texto: 'Revisión de trabajadores' },
+    { ruta: '/rendimiento', texto: 'Rendimiento' },
     { ruta: '/mi-cuenta', texto: 'Mi cuenta' },
     { ruta: '/supervisor/catalogos', texto: 'Categorías y zonas' },
   ],
@@ -47,7 +49,7 @@ export const MENU_POR_ROL: Record<string, ItemMenu[]> = {
   super_supervisor: [
     { ruta: '/inicio', texto: 'Inicio' },
     { ruta: '/supervisor/revision-trabajadores', texto: 'Revisión de trabajadores' },
-    { ruta: '/mi-cuenta', texto: 'Mi cuenta' },
+    { ruta: '/rendimiento', texto: 'Rendimiento' },{ ruta: '/mi-cuenta', texto: 'Mi cuenta' },
     { ruta: '/supervisor/catalogos', texto: 'Categorías y zonas' },
   ],
 
@@ -66,6 +68,7 @@ export const ACCESOS_POR_ROL: Record<string, Acceso[]> = {
     { texto: 'Mis ofertas', descripcion: 'Seguimiento de lo que ofertaste', ruta: '/mis-ofertas' },
     { texto: 'Mis trabajos', descripcion: 'Avance, incrementos y cobros', ruta: '/trabajos' },
     { texto: 'Mi calendario', descripcion: 'Tus trabajos por día y hora', ruta: '/calendario' },
+    { texto: 'Mi rendimiento', descripcion: 'Trabajos, cancelaciones, ingresos y calificación', ruta: '/rendimiento' },
     { texto: 'Reclamos', descripcion: 'Reclamos sobre tus trabajos', ruta: '/reclamos-trabajador' },
   ],
   inspector: [{ texto: 'Mis inspecciones', descripcion: 'Visitas asignadas y resultados' }],
@@ -75,6 +78,12 @@ export const ACCESOS_POR_ROL: Record<string, Acceso[]> = {
       texto: 'Revisión de trabajadores',
       descripcion: 'Consultar documentos y aprobar perfiles',
       ruta: '/supervisor/revision-trabajadores',
+      
+    },
+    {
+      texto: 'Rendimiento de trabajadores',
+      descripcion: 'Trabajos, cancelaciones, ingresos y calificaciones por fechas',
+      ruta: '/rendimiento',
     },
     {
       texto: 'Reclamos',
@@ -97,6 +106,11 @@ export const ACCESOS_POR_ROL: Record<string, Acceso[]> = {
       texto: 'Revisión de trabajadores',
       descripcion: 'Consultar documentos y aprobar perfiles',
       ruta: '/supervisor/revision-trabajadores',
+    },
+    {
+      texto: 'Rendimiento de trabajadores',
+      descripcion: 'Trabajos, cancelaciones, ingresos y calificaciones por fechas',
+      ruta: '/rendimiento',
     },
     {
       texto: 'Parámetros del sistema',
