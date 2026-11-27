@@ -97,8 +97,14 @@ export const routes: Routes = [
           { path: ':id', loadComponent: () => import('./pages/trabajo-detalle').then((m) => m.VerTrabajo) },
         ],
       },
-
+      // ---------- Panel de rendimiento (trabajador: el suyo; supervisor: todos) ----------
+      {
+        path: 'rendimiento',
+        canActivate: [rolGuard('trabajador', 'supervisor', 'super_supervisor')],
+        loadComponent: () => import('./pages/rendimiento').then((m) => m.Rendimiento),
+      },
       // ---------- Perfil público de un trabajador (cualquier usuario con sesión) ----------
+      
       {
         path: 'trabajadores/:id',
         loadComponent: () => import('./pages/perfil-trabajador').then((m) => m.PerfilTrabajador),
