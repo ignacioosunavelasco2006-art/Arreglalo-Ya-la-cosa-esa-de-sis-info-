@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 
 import { API_URL } from './config';
-import { Calendario, Trabajo, TrabajoDetalle, VisitaPrevia } from './modelos';
+import { Calendario, Reprogramacion, Trabajo, TrabajoDetalle, VisitaPrevia } from './modelos';
 
 export interface DatosAceptarOferta {
   id_oferta: number;
@@ -78,6 +78,31 @@ export class TrabajosService {
   // ---- Finalización ----
   responderFinalizacion(idFinalizacion: number, aceptar: boolean, motivo_rechazo?: string) {
     return this.http.patch(`${API_URL}/trabajos/finalizaciones/${idFinalizacion}`, {
+      aceptar,
+      ...(motivo_rechazo ? { motivo_rechazo } : {}),
+    });
+  }
+
+  // ---- Reprogramaciones ----
+  solicitarReprogramacion(
+    idTrabajo: number,
+    fecha_inicio_propuesta: string,
+    fecha_fin_propuesta: string,
+    motivo: string,
+  ) {
+    return this.http.post<Reprogramacion>(`${API_URL}/trabajos/${idTrabajo}/reprogramaciones`, {
+      fecha_inicio_propuesta,
+      fecha_fin_propuesta,
+      motivo,
+    });
+  }
+
+  obtenerReprogramaciones(idTrabajo: number) {
+    return this.http.get<Reprogramacion[]>(`${API_URL}/trabajos/${idTrabajo}/reprogramaciones`);
+  }
+
+  responderReprogramacion(idReprogramacion: number, aceptar: boolean, motivo_rechazo?: string) {
+    return this.http.patch(`${API_URL}/trabajos/reprogramaciones/${idReprogramacion}`, {
       aceptar,
       ...(motivo_rechazo ? { motivo_rechazo } : {}),
     });

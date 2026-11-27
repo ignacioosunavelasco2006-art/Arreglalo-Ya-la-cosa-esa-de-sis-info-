@@ -19,6 +19,7 @@ import { VisitaPrevia } from '../entities/visita-previa.entity';
 import { IncrementoPrecio } from '../entities/incremento-precio.entity';
 import { SolicitudFinalizacion } from '../entities/solicitud-finalizacion.entity';
 import { VistaTrabajosPrecioTotal } from '../entities/vista-trabajos-precio-total.entity';
+import { ReprogramacionTrabajo } from '../entities/reprogramacion-trabajo.entity';
 
 import { SistemaService } from '../sistema/sistema.service';
 import { PagosService } from '../pagos/pagos.service';
@@ -31,6 +32,8 @@ import { CrearIncrementoPrecioDto } from './dto/crear-incremento-precio.dto';
 import { ResponderIncrementoPrecioDto } from './dto/responder-incremento-precio.dto';
 import { SolicitarFinalizacionDto } from './dto/solicitar-finalizacion.dto';
 import { ResponderFinalizacionDto } from './dto/responder-finalizacion.dto';
+import { CrearReprogramacionDto } from './dto/crear-reprogramacion.dto';
+import { ResponderReprogramacionDto } from './dto/responder-reprogramacion.dto';
 
 const METODOS_PAGO = ['plataforma', 'qr', 'efectivo'];
 const ESTADOS_TRABAJO = [
@@ -42,16 +45,14 @@ const ESTADOS_TRABAJO = [
   'cancelado',
   'en_reclamo',
 ];
-// Estados en los que el trabajo ocupa la agenda del trabajador (RN-11)
 const ESTADOS_AGENDA = [
   'pendiente_anticipo',
   'programado',
   'en_camino',
   'en_proceso',
 ];
-// Estados en los que el trabajo está "en curso" (permite incrementos)
 const ESTADOS_EN_CURSO = ['programado', 'en_camino', 'en_proceso'];
-// Cambios de estado que puede hacer el trabajador
+const ESTADOS_REPROGRAMABLES = ['pendiente_anticipo', 'programado'];
 const TRANSICIONES: Record<string, string[]> = {
   programado: ['en_camino', 'en_proceso'],
   en_camino: ['en_proceso'],
@@ -88,13 +89,14 @@ export class TrabajosService {
     private readonly finalizacionRepository: Repository<SolicitudFinalizacion>,
     @InjectRepository(VistaTrabajosPrecioTotal)
     private readonly vistaRepository: Repository<VistaTrabajosPrecioTotal>,
+    @InjectRepository(ReprogramacionTrabajo)
+    private readonly reprogramacionRepository: Repository<ReprogramacionTrabajo>,
   ) {}
 
   // ---------------------------------------------------------------
   // TRABAJOS
   // ---------------------------------------------------------------
 
-  // Aceptar una oferta (RF-14, RN-01): crea el trabajo en UNA transacción
   async aceptarOferta(idCliente: number, dto: AceptarOfertaDto) {
     const metodoPago = dto.metodo_pago ?? 'plataforma';
     if (!METODOS_PAGO.includes(metodoPago)) {
@@ -118,7 +120,6 @@ export class TrabajosService {
             throw new NotFoundException('Oferta no encontrada');
           }
 
-          // Se bloquea la solicitud para evitar dos aceptaciones a la vez
           const solicitud = await manager.findOne(SolicitudServicio, {
             where: { id_solicitud: ofertaPrevia.id_solicitud },
             lock: { mode: 'pessimistic_write' },
@@ -153,7 +154,7 @@ export class TrabajosService {
               'El trabajador ya no está habilitado para trabajar',
             );
           }
-          // P7 / RN-18: un trabajador suspendido deja de poder ser contratado
+
           const cuentaTrabajador = await manager.findOne(Usuario, {
             where: { id_usuario: oferta.id_trabajador },
           });
@@ -163,7 +164,6 @@ export class TrabajosService {
             );
           }
 
-          // Precio final: el estimado, o el definitivo si hubo visita previa
           let precioFinal = Number(oferta.precio_estimado);
           if (oferta.requiere_visita) {
             const visita = await manager.findOne(VisitaPrevia, {
@@ -177,28 +177,13 @@ export class TrabajosService {
             precioFinal = Number(visita.precio_definitivo);
           }
 
-          // RN-11: el trabajador no puede tener trabajos que se crucen
           if (inicio && fin) {
-            const choques = await manager
-              .createQueryBuilder(Trabajo, 't')
-              .where('t.id_trabajador = :idTrabajador', {
-                idTrabajador: oferta.id_trabajador,
-              })
-              .andWhere('t.estado IN (:...estados)', {
-                estados: ESTADOS_AGENDA,
-              })
-              .andWhere('t.fecha_inicio_prog IS NOT NULL')
-              .andWhere('t.fecha_fin_prog IS NOT NULL')
-              .andWhere(
-                't.fecha_inicio_prog < :fin AND t.fecha_fin_prog > :inicio',
-                { inicio, fin },
-              )
-              .getCount();
-            if (choques > 0) {
-              throw new ConflictException(
-                'El trabajador ya tiene un trabajo que se cruza con ese horario',
-              );
-            }
+            await this.verificarChoqueAgenda(
+              manager,
+              oferta.id_trabajador,
+              inicio,
+              fin,
+            );
           }
 
           await manager.update(
@@ -247,7 +232,6 @@ export class TrabajosService {
         },
       );
 
-      // RF-35 "aceptaciones": avisa a ambas partes (el contacto por WhatsApp queda fuera del alcance)
       await this.sistema.notificar(
         trabajo.id_trabajador,
         'oferta_aceptada',
@@ -258,7 +242,13 @@ export class TrabajosService {
         'pagar_anticipo',
         `Aceptaste una oferta (trabajo #${trabajo.id_trabajo}). Paga el anticipo para programar el trabajo.`,
       );
-      await this.sistema.auditar(idCliente, 'oferta_aceptada', 'trabajos', trabajo.id_trabajo, `oferta ${dto.id_oferta}, precio ${trabajo.precio_final}`);
+      await this.sistema.auditar(
+        idCliente,
+        'oferta_aceptada',
+        'trabajos',
+        trabajo.id_trabajo,
+        `oferta ${dto.id_oferta}, precio ${trabajo.precio_final}`,
+      );
 
       return this.formatearTrabajo(trabajo);
     } catch (error) {
@@ -266,7 +256,6 @@ export class TrabajosService {
     }
   }
 
-  // RF-21: historial del propio usuario (como cliente y/o como trabajador)
   async obtenerMisTrabajos(idUsuario: number, estado?: string) {
     if (estado && !ESTADOS_TRABAJO.includes(estado)) {
       throw new BadRequestException(`estado debe ser: ${ESTADOS_TRABAJO.join(', ')}`);
@@ -282,7 +271,6 @@ export class TrabajosService {
     return trabajos.map((t) => this.formatearTrabajo(t));
   }
 
-  // Vista de supervisión (reportes, reclamos): todos los trabajos con filtros
   async obtenerTodos(filtros: { id_cliente?: number; id_trabajador?: number; estado?: string }) {
     const where: FindOptionsWhere<Trabajo> = {};
     if (filtros.id_cliente) where.id_cliente = filtros.id_cliente;
@@ -293,11 +281,14 @@ export class TrabajosService {
       }
       where.estado = filtros.estado;
     }
-    const trabajos = await this.trabajoRepository.find({ where, order: { fecha_creacion: 'DESC' }, take: 200 });
+    const trabajos = await this.trabajoRepository.find({
+      where,
+      order: { fecha_creacion: 'DESC' },
+      take: 200,
+    });
     return trabajos.map((t) => this.formatearTrabajo(t));
   }
 
-  // RF-19 / CU-19: calendario del trabajador, agrupado por día y hora (sin dirección exacta)
   async calendario(idTrabajador: number, desde?: string, hasta?: string) {
     const ini = desde ? this.convertirFecha(desde) : new Date();
     const fin = hasta ? this.convertirFecha(hasta) : new Date(ini.getTime() + 30 * DIA_MS);
@@ -331,13 +322,11 @@ export class TrabajosService {
     };
   }
 
-  // Detalle completo: precio total, historial, incrementos y finalizaciones.
-  // Solo lo ven el cliente y el trabajador del trabajo (y la supervisión, para reclamos).
   async obtenerTrabajo(id: number, usuario: UsuarioContexto) {
     const trabajo = await this.buscarTrabajo(id);
     this.verificarParte(trabajo, usuario);
 
-    const [vista, historial, incrementos, finalizaciones, solicitud] =
+    const [vista, historial, incrementos, finalizaciones, reprogramaciones, solicitud] =
       await Promise.all([
         this.vistaRepository.findOne({ where: { id_trabajo: id } }),
         this.historialRepository.find({
@@ -352,6 +341,10 @@ export class TrabajosService {
           where: { id_trabajo: id },
           order: { fecha_solicitud: 'ASC' },
         }),
+        this.reprogramacionRepository.find({
+          where: { id_trabajo: id },
+          order: { fecha_solicitud: 'DESC' },
+        }),
         this.solicitudRepository.findOne({
           where: { id_solicitud: trabajo.id_solicitud },
         }),
@@ -363,15 +356,14 @@ export class TrabajosService {
       precio_total: vista
         ? Number(vista.precio_total)
         : Number(trabajo.precio_final),
-      // Las partes del trabajo sí pueden ver la dirección completa
       direccion_exacta: solicitud?.direccion_exacta ?? null,
       historial,
       incrementos: incrementos.map((i) => this.formatearIncremento(i)),
       finalizaciones,
+      reprogramaciones,
     };
   }
 
-  // El trabajador marca 'en_camino' o 'en_proceso'
   async actualizarEstado(id: number, idTrabajador: number, dto: ActualizarEstadoTrabajoDto) {
     const trabajo = await this.buscarTrabajo(id);
 
@@ -404,7 +396,6 @@ export class TrabajosService {
       },
     );
 
-    // RF-35 "cambios de estado": el cliente se entera
     const textoEstado = dto.estado === 'en_camino' ? 'va en camino' : 'comenzó el trabajo';
     await this.sistema.notificar(
       trabajo.id_cliente,
@@ -418,7 +409,6 @@ export class TrabajosService {
   // VISITAS PREVIAS (RF-16)
   // ---------------------------------------------------------------
 
-  // El trabajador propone fecha de visita para una oferta que la requiere
   async crearVisita(idTrabajador: number, dto: CrearVisitaPreviaDto) {
     const oferta = await this.buscarOferta(dto.id_oferta);
 
@@ -478,7 +468,6 @@ export class TrabajosService {
     return visitas.map((v) => this.formatearVisita(v));
   }
 
-  // Flujo: propuesta → aceptada → realizada → precio_aceptado (o cancelada)
   async responderVisita(idVisita: number, idUsuario: number, dto: ResponderVisitaPreviaDto) {
     const visita = await this.visitaRepository.findOne({
       where: { id_visita: idVisita },
@@ -531,7 +520,6 @@ export class TrabajosService {
         break;
 
       case 'rechazar':
-        // Si el cliente rechaza el precio, se cancela sin costo (CU-16)
         if (!esCliente) {
           throw new ForbiddenException('Solo el cliente puede rechazar');
         }
@@ -548,7 +536,6 @@ export class TrabajosService {
 
     const guardada = await this.visitaRepository.save(visita);
 
-    // Aviso a la otra parte según la acción
     const avisos: Record<string, { para: number; mensaje: string }> = {
       aceptar_fecha: { para: oferta.id_trabajador, mensaje: 'El cliente aceptó la fecha de la visita previa.' },
       registrar_resultado: {
@@ -606,13 +593,18 @@ export class TrabajosService {
         }),
       );
 
-      // RF-18: "el sistema debe notificar al cliente cualquier cambio propuesto"
       await this.sistema.notificar(
         trabajo.id_cliente,
         'incremento_solicitado',
         `El trabajador pide un incremento de Bs ${Number(dto.monto_adicional).toFixed(2)} en el trabajo #${dto.id_trabajo}. Acéptalo o recházalo: el precio no cambia sin tu aprobación.`,
       );
-      await this.sistema.auditar(idTrabajador, 'incremento_solicitado', 'incrementos_precio', guardado.id_incremento, `monto ${dto.monto_adicional}`);
+      await this.sistema.auditar(
+        idTrabajador,
+        'incremento_solicitado',
+        'incrementos_precio',
+        guardado.id_incremento,
+        `monto ${dto.monto_adicional}`,
+      );
       return this.formatearIncremento(guardado);
     } catch (error) {
       return this.lanzarSiErrorBd(error);
@@ -630,7 +622,6 @@ export class TrabajosService {
     return incrementos.map((i) => this.formatearIncremento(i));
   }
 
-  // El cliente acepta o rechaza; el precio solo cambia si acepta
   async responderIncremento(
     idIncremento: number,
     idCliente: number,
@@ -729,7 +720,6 @@ export class TrabajosService {
     return guardada;
   }
 
-  // El cliente acepta (trabajo terminado) o rechaza con motivo (el trabajo continúa)
   async responderFinalizacion(
     idFinalizacion: number,
     idCliente: number,
@@ -773,7 +763,6 @@ export class TrabajosService {
         finalizacion.estado = 'aceptada';
         const anterior = trabajo.estado;
         trabajo.estado = 'terminado';
-        // Desde aquí corren los 7 días para presentar un reclamo (RN-07)
         trabajo.fecha_cierre = new Date();
         await manager.save(trabajo);
         await this.registrarHistorial(
@@ -793,8 +782,6 @@ export class TrabajosService {
     });
 
     if (dto.aceptar) {
-      // RF-20 → RF-25: el cierre dispara el cobro del saldo y la liquidación al trabajador
-      // (menos la comisión). Si falla, el trabajo ya quedó terminado y se alerta a supervisión.
       const pago = await this.pagosService.procesarCierre(trabajo.id_trabajo);
       await this.sistema.notificar(
         trabajo.id_trabajador,
@@ -810,13 +797,257 @@ export class TrabajosService {
       'finalizacion_rechazada',
       `El cliente rechazó la finalización del trabajo #${trabajo.id_trabajo}: ${dto.motivo_rechazo}. El trabajo continúa.`,
     );
-    await this.sistema.auditar(idCliente, 'finalizacion_rechazada', 'trabajos', trabajo.id_trabajo, dto.motivo_rechazo ?? null);
+    await this.sistema.auditar(
+      idCliente,
+      'finalizacion_rechazada',
+      'trabajos',
+      trabajo.id_trabajo,
+      dto.motivo_rechazo ?? null,
+    );
     return resultado;
+  }
+
+  // ---------------------------------------------------------------
+  // REPROGRAMACIONES DE TRABAJO
+  // ---------------------------------------------------------------
+
+  async solicitarReprogramacion(
+    idTrabajo: number,
+    idUsuario: number,
+    dto: CrearReprogramacionDto,
+  ) {
+    const trabajo = await this.buscarTrabajo(idTrabajo);
+
+    if (idUsuario !== trabajo.id_cliente && idUsuario !== trabajo.id_trabajador) {
+      throw new ForbiddenException(
+        'Solo el cliente o el trabajador del trabajo pueden solicitar una reprogramación',
+      );
+    }
+    if (!ESTADOS_REPROGRAMABLES.includes(trabajo.estado)) {
+      throw new BadRequestException(
+        `Solo se pueden reprogramar trabajos en estado: ${ESTADOS_REPROGRAMABLES.join(', ')}`,
+      );
+    }
+    if (!dto.motivo?.trim() || dto.motivo.trim().length > 500) {
+      throw new BadRequestException(
+        'El motivo es obligatorio (máximo 500 caracteres)',
+      );
+    }
+    if (!dto.fecha_inicio_propuesta || !dto.fecha_fin_propuesta) {
+      throw new BadRequestException(
+        'Debe enviar fecha_inicio_propuesta y fecha_fin_propuesta',
+      );
+    }
+
+    const { inicio, fin } = this.validarAgenda(
+      dto.fecha_inicio_propuesta,
+      dto.fecha_fin_propuesta,
+    );
+
+    const pendiente = await this.reprogramacionRepository.findOne({
+      where: { id_trabajo: idTrabajo, estado: 'pendiente' },
+    });
+    if (pendiente) {
+      throw new ConflictException(
+        'Ya existe una solicitud de reprogramación pendiente para este trabajo',
+      );
+    }
+
+    await this.verificarChoqueAgenda(
+      this.trabajoRepository.manager,
+      trabajo.id_trabajador,
+      inicio!,
+      fin!,
+      trabajo.id_trabajo,
+    );
+
+    try {
+      const guardada = await this.reprogramacionRepository.save(
+        this.reprogramacionRepository.create({
+          id_trabajo: trabajo.id_trabajo,
+          id_solicitante: idUsuario,
+          fecha_inicio_anterior: trabajo.fecha_inicio_prog,
+          fecha_fin_anterior: trabajo.fecha_fin_prog,
+          fecha_inicio_propuesta: inicio!,
+          fecha_fin_propuesta: fin!,
+          motivo: dto.motivo.trim(),
+          estado: 'pendiente',
+        }),
+      );
+
+      const destinatario =
+        idUsuario === trabajo.id_cliente
+          ? trabajo.id_trabajador
+          : trabajo.id_cliente;
+      const quien =
+        idUsuario === trabajo.id_cliente ? 'El cliente' : 'El trabajador';
+
+      await this.sistema.notificar(
+        destinatario,
+        'reprogramacion_solicitada',
+        `${quien} solicitó reprogramar el trabajo #${trabajo.id_trabajo} para el ${inicio!.toISOString().slice(0, 16).replace('T', ' ')}. Acéptala o recházala.`,
+      );
+      await this.sistema.auditar(
+        idUsuario,
+        'reprogramacion_solicitada',
+        'reprogramaciones_trabajo',
+        guardada.id_reprogramacion,
+        `trabajo ${trabajo.id_trabajo}`,
+      );
+
+      return guardada;
+    } catch (error) {
+      return this.lanzarSiErrorBd(error);
+    }
+  }
+
+  async obtenerReprogramaciones(idTrabajo: number, usuario: UsuarioContexto) {
+    const trabajo = await this.buscarTrabajo(idTrabajo);
+    this.verificarParte(trabajo, usuario);
+
+    return this.reprogramacionRepository.find({
+      where: { id_trabajo: idTrabajo },
+      order: { fecha_solicitud: 'DESC' },
+    });
+  }
+
+  async responderReprogramacion(
+    idReprogramacion: number,
+    idUsuario: number,
+    dto: ResponderReprogramacionDto,
+  ) {
+    const reprogramacion = await this.reprogramacionRepository.findOne({
+      where: { id_reprogramacion: idReprogramacion },
+    });
+    if (!reprogramacion) {
+      throw new NotFoundException('Solicitud de reprogramación no encontrada');
+    }
+
+    const trabajo = await this.buscarTrabajo(reprogramacion.id_trabajo);
+    if (idUsuario !== trabajo.id_cliente && idUsuario !== trabajo.id_trabajador) {
+      throw new ForbiddenException('No participa en este trabajo');
+    }
+    if (idUsuario === reprogramacion.id_solicitante) {
+      throw new ForbiddenException(
+        'No puedes responder tu propia solicitud de reprogramación',
+      );
+    }
+    if (reprogramacion.estado !== 'pendiente') {
+      throw new BadRequestException(
+        'La solicitud de reprogramación ya fue respondida',
+      );
+    }
+    if (typeof dto.aceptar !== 'boolean') {
+      throw new BadRequestException('aceptar debe ser true o false');
+    }
+    if (!ESTADOS_REPROGRAMABLES.includes(trabajo.estado)) {
+      throw new BadRequestException(
+        'El trabajo ya no se encuentra en un estado reprogramable',
+      );
+    }
+    if (
+      !dto.aceptar &&
+      (!dto.motivo_rechazo?.trim() || dto.motivo_rechazo.trim().length > 300)
+    ) {
+      throw new BadRequestException(
+        'Debe indicar el motivo del rechazo (máximo 300 caracteres)',
+      );
+    }
+
+    try {
+      const resultado = await this.trabajoRepository.manager.transaction(
+        async (manager) => {
+          reprogramacion.id_respondido_por = idUsuario;
+          reprogramacion.fecha_respuesta = new Date();
+
+          if (dto.aceptar) {
+            if (reprogramacion.fecha_inicio_propuesta.getTime() < Date.now()) {
+              throw new BadRequestException(
+                'La fecha propuesta para reprogramar ya pasó',
+              );
+            }
+
+            await this.verificarChoqueAgenda(
+              manager,
+              trabajo.id_trabajador,
+              reprogramacion.fecha_inicio_propuesta,
+              reprogramacion.fecha_fin_propuesta,
+              trabajo.id_trabajo,
+            );
+
+            reprogramacion.estado = 'aceptada';
+            trabajo.fecha_inicio_prog = reprogramacion.fecha_inicio_propuesta;
+            trabajo.fecha_fin_prog = reprogramacion.fecha_fin_propuesta;
+            await manager.save(trabajo);
+          } else {
+            reprogramacion.estado = 'rechazada';
+            reprogramacion.motivo_rechazo = dto.motivo_rechazo!.trim();
+          }
+
+          const guardada = await manager.save(reprogramacion);
+          return {
+            reprogramacion: guardada,
+            trabajo: this.formatearTrabajo(trabajo),
+          };
+        },
+      );
+
+      await this.sistema.notificar(
+        reprogramacion.id_solicitante,
+        dto.aceptar ? 'reprogramacion_aceptada' : 'reprogramacion_rechazada',
+        dto.aceptar
+          ? `Se aceptó tu solicitud para reprogramar el trabajo #${trabajo.id_trabajo} al ${reprogramacion.fecha_inicio_propuesta.toISOString().slice(0, 16).replace('T', ' ')}.`
+          : `Se rechazó tu solicitud para reprogramar el trabajo #${trabajo.id_trabajo}: ${dto.motivo_rechazo}. Se mantiene el horario anterior.`,
+      );
+      await this.sistema.auditar(
+        idUsuario,
+        dto.aceptar ? 'reprogramacion_aceptada' : 'reprogramacion_rechazada',
+        'reprogramaciones_trabajo',
+        idReprogramacion,
+        dto.aceptar
+          ? `trabajo ${trabajo.id_trabajo}`
+          : (dto.motivo_rechazo?.trim() ?? null),
+      );
+
+      return resultado;
+    } catch (error) {
+      return this.lanzarSiErrorBd(error);
+    }
   }
 
   // ---------------------------------------------------------------
   // MÉTODOS AUXILIARES
   // ---------------------------------------------------------------
+
+  private async verificarChoqueAgenda(
+    manager: EntityManager,
+    idTrabajador: number,
+    inicio: Date,
+    fin: Date,
+    excluirIdTrabajo?: number,
+  ) {
+    const qb = manager
+      .createQueryBuilder(Trabajo, 't')
+      .where('t.id_trabajador = :idTrabajador', { idTrabajador })
+      .andWhere('t.estado IN (:...estados)', { estados: ESTADOS_AGENDA })
+      .andWhere('t.fecha_inicio_prog IS NOT NULL')
+      .andWhere('t.fecha_fin_prog IS NOT NULL')
+      .andWhere(
+        't.fecha_inicio_prog < :fin AND t.fecha_fin_prog > :inicio',
+        { inicio, fin },
+      );
+
+    if (excluirIdTrabajo !== undefined) {
+      qb.andWhere('t.id_trabajo != :excluirIdTrabajo', { excluirIdTrabajo });
+    }
+
+    const choques = await qb.getCount();
+    if (choques > 0) {
+      throw new ConflictException(
+        'El trabajador ya tiene un trabajo que se cruza con ese horario',
+      );
+    }
+  }
 
   private async buscarTrabajo(id: number) {
     const trabajo = await this.trabajoRepository.findOne({
@@ -852,7 +1083,6 @@ export class TrabajosService {
     return usuario.roles.includes('supervisor') || usuario.roles.includes('super_supervisor');
   }
 
-  // Las partes del trabajo y la supervisión (que atiende reclamos)
   private verificarParte(trabajo: Trabajo, usuario: UsuarioContexto) {
     const esParte =
       usuario.id_usuario === trabajo.id_cliente || usuario.id_usuario === trabajo.id_trabajador;
@@ -869,7 +1099,6 @@ export class TrabajosService {
     }
   }
 
-  // Trazabilidad de cada cambio de estado (RNF-07)
   private async registrarHistorial(
     manager: EntityManager,
     idTrabajo: number,
@@ -887,7 +1116,6 @@ export class TrabajosService {
     );
   }
 
-  // Fechas de agenda: deben venir juntas, fin > inicio y no ser pasadas
   private validarAgenda(inicio?: string, fin?: string) {
     if (!inicio && !fin) {
       return { inicio: null, fin: null };
@@ -918,7 +1146,6 @@ export class TrabajosService {
     return fecha;
   }
 
-  // Los parámetros de la URL llegan como texto
   private aEnteroOpcional(valor: unknown, campo: string) {
     if (valor === undefined || valor === null || valor === '') {
       return undefined;
@@ -938,7 +1165,6 @@ export class TrabajosService {
     return numero;
   }
 
-  // PostgreSQL devuelve los NUMERIC como texto; se convierten a número
   private aNumero(valor: number | null) {
     return valor === null || valor === undefined ? null : Number(valor);
   }
@@ -958,7 +1184,6 @@ export class TrabajosService {
     return { ...incremento, monto_adicional: Number(incremento.monto_adicional) };
   }
 
-  // 23503 = clave foránea, 23505 = valor duplicado (índices únicos)
   private lanzarSiErrorBd(error: unknown): never {
     const codigo = (error as { code?: string }).code;
     if (codigo === '23505') {

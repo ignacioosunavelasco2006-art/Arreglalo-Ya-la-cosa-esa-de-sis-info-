@@ -18,6 +18,8 @@ import { CrearIncrementoPrecioDto } from './dto/crear-incremento-precio.dto';
 import { ResponderIncrementoPrecioDto } from './dto/responder-incremento-precio.dto';
 import { SolicitarFinalizacionDto } from './dto/solicitar-finalizacion.dto';
 import { ResponderFinalizacionDto } from './dto/responder-finalizacion.dto';
+import { CrearReprogramacionDto } from './dto/crear-reprogramacion.dto';
+import { ResponderReprogramacionDto } from './dto/responder-reprogramacion.dto';
 
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser, type UsuarioAutenticado } from '../auth/decorators/current-user.decorator';
@@ -133,6 +135,18 @@ export class TrabajosController {
     return this.trabajosService.responderFinalizacion(idFinalizacion, idCliente, dto);
   }
 
+  // ================= Reprogramaciones =================
+
+  @Roles('cliente', 'trabajador')
+  @Patch('reprogramaciones/:idReprogramacion')
+  responderReprogramacion(
+    @Param('idReprogramacion', ParseIntPipe) idReprogramacion: number,
+    @CurrentUser('id_usuario') idUsuario: number,
+    @Body() dto: ResponderReprogramacionDto,
+  ) {
+    return this.trabajosService.responderReprogramacion(idReprogramacion, idUsuario, dto);
+  }
+
   // ================= Rutas con :id (al final) =================
 
   @Get(':id')
@@ -153,5 +167,23 @@ export class TrabajosController {
     @Body() dto: ActualizarEstadoTrabajoDto,
   ) {
     return this.trabajosService.actualizarEstado(id, idTrabajador, dto);
+  }
+
+  @Roles('cliente', 'trabajador')
+  @Post(':id/reprogramaciones')
+  solicitarReprogramacion(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('id_usuario') idUsuario: number,
+    @Body() dto: CrearReprogramacionDto,
+  ) {
+    return this.trabajosService.solicitarReprogramacion(id, idUsuario, dto);
+  }
+
+  @Get(':id/reprogramaciones')
+  obtenerReprogramaciones(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() usuario: UsuarioAutenticado,
+  ) {
+    return this.trabajosService.obtenerReprogramaciones(id, usuario);
   }
 }
