@@ -149,6 +149,22 @@ export interface Finalizacion {
   fecha_respuesta: string | null;
 }
 
+export interface Reprogramacion {
+  id_reprogramacion: number;
+  id_trabajo: number;
+  id_solicitante: number;
+  fecha_inicio_anterior: string | null;
+  fecha_fin_anterior: string | null;
+  fecha_inicio_propuesta: string;
+  fecha_fin_propuesta: string;
+  motivo: string;
+  estado: string; // pendiente | aceptada | rechazada
+  id_respondido_por: number | null;
+  motivo_rechazo: string | null;
+  fecha_solicitud: string;
+  fecha_respuesta: string | null;
+}
+
 export interface CambioEstado {
   estado_anterior: string | null;
   estado_nuevo: string;
@@ -163,6 +179,7 @@ export interface TrabajoDetalle extends Trabajo {
   historial: CambioEstado[];
   incrementos: Incremento[];
   finalizaciones: Finalizacion[];
+  reprogramaciones?: Reprogramacion[];
 }
 
 export interface Pago {
@@ -310,8 +327,6 @@ export interface ArchivoSubido {
   nombre_original: string;
   tamano: number;
 }
-
-
 
 // ---------- Supervisión de trabajadores ----------
 

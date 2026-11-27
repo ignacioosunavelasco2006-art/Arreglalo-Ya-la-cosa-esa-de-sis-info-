@@ -8,13 +8,21 @@ import { AuthService } from '../core/auth.service';
 import { CalificacionesService } from '../core/calificaciones.service';
 import { mensajeDeError } from '../core/errores';
 import { NOMBRE_MEDIO_PAGO, NOMBRE_TIPO_PAGO } from '../core/estados';
-import { CalificacionRecibida, Finalizacion, Incremento, Pago, TrabajoDetalle } from '../core/modelos';
+import {
+  CalificacionRecibida,
+  Finalizacion,
+  Incremento,
+  Pago,
+  Reprogramacion,
+  TrabajoDetalle,
+} from '../core/modelos';
 import { PagosService } from '../core/pagos.service';
 import { ParametrosService } from '../core/parametros.service';
 import { TrabajosService } from '../core/trabajos.service';
 import { EstadoBadge } from '../shared/estado-badge';
 
 const ESTADOS_CANCELABLES = ['pendiente_anticipo', 'programado', 'en_camino'];
+const ESTADOS_REPROGRAMABLES = ['pendiente_anticipo', 'programado'];
 
 @Component({
   selector: 'app-ver-trabajo',
@@ -34,6 +42,91 @@ const ESTADOS_CANCELABLES = ['pendiente_anticipo', 'programado', 'en_camino'];
 
       @if (mensaje()) { <div class="alert alert-success py-2">{{ mensaje() }}</div> }
       @if (error()) { <div class="alert alert-danger py-2">{{ error() }}</div> }
+
+      <!-- ====== REPROGRAMACIÓN DE HORARIO (CLIENTE O TRABAJADOR) ====== -->
+      @if (reprogramacionPendiente(); as rep) {
+        @if (rep.id_solicitante === usuarioId()) {
+          <div class="alert alert-info mb-3">
+            <strong>Solicitud de reprogramación pendiente:</strong> propusiste cambiar el horario al
+            <strong>{{ rep.fecha_inicio_propuesta | date: 'dd/MM/yyyy HH:mm' }}</strong>
+            - <strong>{{ rep.fecha_fin_propuesta | date: 'dd/MM/yyyy HH:mm' }}</strong>.
+            Esperando respuesta de la otra parte.
+          </div>
+        } @else {
+          <div class="card border-info mb-3"><div class="card-body">
+            <h2 class="h6">Solicitud de reprogramación de horario</h2>
+            <p class="small mb-1">
+              Nuevo horario propuesto:
+              <strong>{{ rep.fecha_inicio_propuesta | date: 'dd/MM/yyyy HH:mm' }}</strong>
+              a
+              <strong>{{ rep.fecha_fin_propuesta | date: 'dd/MM/yyyy HH:mm' }}</strong>
+            </p>
+            <p class="small mb-2">Motivo: {{ rep.motivo }}</p>
+
+            @if (!mostrarRechazoReprog()) {
+              <div class="d-flex gap-2">
+                <button class="btn btn-success btn-sm" type="button" [disabled]="procesando()"
+                        (click)="aceptarReprogramacion(rep)">Aceptar nuevo horario</button>
+                <button class="btn btn-outline-danger btn-sm" type="button" [disabled]="procesando()"
+                        (click)="mostrarRechazoReprog.set(true)">Rechazar</button>
+              </div>
+            } @else {
+              <form [formGroup]="formRechazoReprog" (ngSubmit)="rechazarReprogramacion(rep)" novalidate>
+                <label class="form-label small" for="motivo-rechazo-reprog">Motivo del rechazo</label>
+                <textarea id="motivo-rechazo-reprog" rows="2" class="form-control form-control-sm"
+                          formControlName="motivo"
+                          [class.is-invalid]="formRechazoReprog.controls.motivo.touched && formRechazoReprog.controls.motivo.invalid"></textarea>
+                <div class="invalid-feedback">Indica el motivo del rechazo.</div>
+                <div class="d-flex gap-2 mt-2">
+                  <button class="btn btn-danger btn-sm" type="submit" [disabled]="procesando()">Confirmar rechazo</button>
+                  <button class="btn btn-outline-secondary btn-sm" type="button" (click)="mostrarRechazoReprog.set(false)">Volver</button>
+                </div>
+              </form>
+            }
+          </div></div>
+        }
+      } @else if (puedeReprogramar()) {
+        <div class="mb-3">
+          @if (!mostrarFormReprog()) {
+            <button class="btn btn-outline-primary btn-sm" type="button" (click)="mostrarFormReprog.set(true)">
+              Solicitar reprogramación de horario
+            </button>
+          } @else {
+            <div class="card border-primary"><div class="card-body">
+              <h2 class="h6">Solicitar reprogramación</h2>
+              <p class="small text-muted mb-2">
+                Propón una nueva fecha y hora. La otra parte deberá aceptarla para que el horario cambie.
+              </p>
+              <form [formGroup]="formReprogramar" (ngSubmit)="solicitarReprogramacion()" novalidate>
+                <div class="row g-2">
+                  <div class="col-sm-6">
+                    <label class="form-label small mb-1" for="reprog-inicio">Nueva fecha/hora inicio</label>
+                    <input id="reprog-inicio" type="datetime-local" class="form-control form-control-sm"
+                           formControlName="fecha_inicio"
+                           [class.is-invalid]="formReprogramar.controls.fecha_inicio.touched && formReprogramar.controls.fecha_inicio.invalid" />
+                  </div>
+                  <div class="col-sm-6">
+                    <label class="form-label small mb-1" for="reprog-fin">Nueva fecha/hora fin</label>
+                    <input id="reprog-fin" type="datetime-local" class="form-control form-control-sm"
+                           formControlName="fecha_fin"
+                           [class.is-invalid]="formReprogramar.controls.fecha_fin.touched && formReprogramar.controls.fecha_fin.invalid" />
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label small mb-1" for="reprog-motivo">Motivo</label>
+                    <input id="reprog-motivo" class="form-control form-control-sm" formControlName="motivo"
+                           maxlength="500" placeholder="Explica por qué necesitas cambiar el horario"
+                           [class.is-invalid]="formReprogramar.controls.motivo.touched && formReprogramar.controls.motivo.invalid" />
+                  </div>
+                </div>
+                <div class="d-flex gap-2 mt-2">
+                  <button class="btn btn-primary btn-sm" type="submit" [disabled]="procesando()">Enviar solicitud</button>
+                  <button class="btn btn-outline-secondary btn-sm" type="button" (click)="mostrarFormReprog.set(false)">Cancelar</button>
+                </div>
+              </form>
+            </div></div>
+          }
+        </div>
+      }
 
       <!-- ====== ACCIONES DEL CLIENTE ====== -->
       @if (esCliente()) {
@@ -330,6 +423,35 @@ const ESTADOS_CANCELABLES = ['pendiente_anticipo', 'programado', 'en_camino'];
               }
             </ul>
           }
+
+          @if (reprogramaciones().length > 0) {
+            <h2 class="h5 mt-4">Reprogramaciones</h2>
+            <ul class="list-group">
+              @for (rep of reprogramaciones(); track rep.id_reprogramacion) {
+                <li class="list-group-item d-flex justify-content-between align-items-start gap-2">
+                  <div class="small">
+                    <div>
+                      <strong>Propuesto:</strong>
+                      {{ rep.fecha_inicio_propuesta | date: 'dd/MM/yy HH:mm' }}
+                      a {{ rep.fecha_fin_propuesta | date: 'dd/MM/yy HH:mm' }}
+                    </div>
+                    <div class="text-muted">Motivo: {{ rep.motivo }}</div>
+                    @if (rep.motivo_rechazo) {
+                      <div class="text-danger">Rechazo: {{ rep.motivo_rechazo }}</div>
+                    }
+                  </div>
+                  <span
+                    class="badge"
+                    [class.text-bg-warning]="rep.estado === 'pendiente'"
+                    [class.text-bg-success]="rep.estado === 'aceptada'"
+                    [class.text-bg-danger]="rep.estado === 'rechazada'"
+                  >
+                    {{ rep.estado }}
+                  </span>
+                </li>
+              }
+            </ul>
+          }
         </div>
 
         <div class="col-12 col-lg-5">
@@ -400,8 +522,10 @@ export class VerTrabajo {
   mensaje = signal<string | null>(null);
   mostrarRechazo = signal(false);
   mostrarCancelar = signal(false);
+  mostrarFormReprog = signal(false);
+  mostrarRechazoReprog = signal(false);
 
-  private usuarioId = computed(() => this.auth.usuario()?.id_usuario);
+  usuarioId = computed(() => this.auth.usuario()?.id_usuario);
   esCliente = computed(() => this.trabajo()?.id_cliente === this.usuarioId());
   esTrabajador = computed(() => this.trabajo()?.id_trabajador === this.usuarioId());
 
@@ -412,6 +536,19 @@ export class VerTrabajo {
   finalizacionPendiente = computed<Finalizacion | undefined>(() =>
     this.trabajo()?.finalizaciones.find((f) => f.estado === 'pendiente'),
   );
+  reprogramaciones = computed<Reprogramacion[]>(() => this.trabajo()?.reprogramaciones ?? []);
+  reprogramacionPendiente = computed<Reprogramacion | undefined>(() =>
+    this.reprogramaciones().find((r) => r.estado === 'pendiente'),
+  );
+  puedeReprogramar = computed(() => {
+    const t = this.trabajo();
+    return (
+      !!t &&
+      ESTADOS_REPROGRAMABLES.includes(t.estado) &&
+      (this.esCliente() || this.esTrabajador()) &&
+      !this.reprogramacionPendiente()
+    );
+  });
   enCurso = computed(() => ['programado', 'en_camino', 'en_proceso'].includes(this.trabajo()?.estado ?? ''));
   saldoEfectivoPendiente = computed(() =>
     this.pagos().find((p) => p.tipo === 'saldo' && p.medio === 'efectivo' && p.estado === 'pendiente'),
@@ -445,6 +582,14 @@ export class VerTrabajo {
     puntaje: [5, [Validators.required, Validators.min(1), Validators.max(5)]],
     comentario: ['', Validators.maxLength(500)],
   });
+  formReprogramar = this.fb.nonNullable.group({
+    fecha_inicio: ['', Validators.required],
+    fecha_fin: ['', Validators.required],
+    motivo: ['', [Validators.required, Validators.maxLength(500)]],
+  });
+  formRechazoReprog = this.fb.nonNullable.group({
+    motivo: ['', [Validators.required, Validators.maxLength(300)]],
+  });
 
   constructor() {
     this.cargar();
@@ -456,6 +601,55 @@ export class VerTrabajo {
 
   medioPago(medio: string) {
     return NOMBRE_MEDIO_PAGO[medio] ?? medio;
+  }
+
+  // ---------------- Reprogramaciones ----------------
+
+  solicitarReprogramacion() {
+    if (this.formReprogramar.invalid) {
+      this.formReprogramar.markAllAsTouched();
+      return;
+    }
+    const v = this.formReprogramar.getRawValue();
+    this.ejecutar(
+      this.api.solicitarReprogramacion(
+        this.id,
+        new Date(v.fecha_inicio).toISOString(),
+        new Date(v.fecha_fin).toISOString(),
+        v.motivo.trim(),
+      ),
+      'Solicitud de reprogramación enviada. La otra parte recibirá una notificación.',
+      () => {
+        this.mostrarFormReprog.set(false);
+        this.formReprogramar.reset();
+      },
+    );
+  }
+
+  aceptarReprogramacion(rep: Reprogramacion) {
+    this.ejecutar(
+      this.api.responderReprogramacion(rep.id_reprogramacion, true),
+      'Reprogramación aceptada: el horario del trabajo fue actualizado.',
+    );
+  }
+
+  rechazarReprogramacion(rep: Reprogramacion) {
+    if (this.formRechazoReprog.invalid) {
+      this.formRechazoReprog.markAllAsTouched();
+      return;
+    }
+    this.ejecutar(
+      this.api.responderReprogramacion(
+        rep.id_reprogramacion,
+        false,
+        this.formRechazoReprog.getRawValue().motivo.trim(),
+      ),
+      'Reprogramación rechazada: se mantiene el horario anterior.',
+      () => {
+        this.mostrarRechazoReprog.set(false);
+        this.formRechazoReprog.reset();
+      },
+    );
   }
 
   // ---------------- Acciones ----------------
@@ -514,7 +708,10 @@ export class VerTrabajo {
   // ---- Acciones del trabajador ----
 
   cambiarEstado(estado: 'en_camino' | 'en_proceso') {
-    this.ejecutar(this.api.cambiarEstado(this.id, estado), estado === 'en_camino' ? 'Avisamos al cliente que vas en camino.' : 'Trabajo en proceso.');
+    this.ejecutar(
+      this.api.cambiarEstado(this.id, estado),
+      estado === 'en_camino' ? 'Avisamos al cliente que vas en camino.' : 'Trabajo en proceso.',
+    );
   }
 
   pedirIncremento() {
@@ -563,7 +760,6 @@ export class VerTrabajo {
     forkJoin({
       trabajo: this.api.obtener(this.id),
       pagos: this.pagosApi.delTrabajo(this.id),
-      // Si no se pueden leer los parámetros se usa el 25 % del informe
       anticipo: this.parametros.porcentaje('anticipo', 0.25).pipe(catchError(() => of(0.25))),
     }).subscribe({
       next: ({ trabajo, pagos, anticipo }) => {
@@ -581,7 +777,6 @@ export class VerTrabajo {
     });
   }
 
-  // El botón de calificar solo aparece si el trabajo terminó y aún no fue calificado
   private revisarCalificacion(t: TrabajoDetalle) {
     this.puedeCalificar.set(false);
     if (t.estado !== 'terminado' || t.id_cliente !== this.usuarioId()) return;
@@ -591,7 +786,6 @@ export class VerTrabajo {
     });
   }
 
-  // Si el trabajador ya fue calificado en este trabajo, se muestra para que pueda responder
   private revisarCalificacionRecibida(t: TrabajoDetalle) {
     this.calificacionRecibida.set(null);
     if (t.estado !== 'terminado' || t.id_trabajador !== this.usuarioId()) return;
@@ -601,7 +795,6 @@ export class VerTrabajo {
     });
   }
 
-  // Ejecuta una acción; si sale bien muestra un mensaje y recarga; si falla muestra el error del servidor
   private ejecutar(peticion: Observable<unknown>, exito: string, alTerminar?: () => void) {
     this.procesando.set(true);
     this.error.set(null);
