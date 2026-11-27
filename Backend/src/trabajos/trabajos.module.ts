@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { TrabajosController } from './trabajos.controller';
 import { TrabajosService } from './trabajos.service';
 import { PagosModule } from '../pagos/pagos.module';
+import { TrabajadoresModule } from '../trabajadores/trabajadores.module';
 
 import { Usuario } from '../entities/usuario.entity';
 import { PerfilTrabajador } from '../entities/perfil-trabajador.entity';
@@ -19,6 +20,7 @@ import { VistaTrabajosPrecioTotal } from '../entities/vista-trabajos-precio-tota
 @Module({
   imports: [
     PagosModule, // al aceptar la finalización se cobra el saldo y se liquida (RF-20 → RF-25)
+    TrabajadoresModule, // NUEVO: para validar ausencias al aceptar una oferta
     TypeOrmModule.forFeature([
       Usuario,
       PerfilTrabajador,
