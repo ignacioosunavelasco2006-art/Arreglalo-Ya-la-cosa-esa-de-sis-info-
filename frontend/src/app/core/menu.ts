@@ -32,11 +32,12 @@ export const MENU_POR_ROL: Record<string, ItemMenu[]> = {
     { ruta: '/mis-ofertas', texto: 'Mis ofertas' },
     { ruta: '/trabajos', texto: 'Mis trabajos' },
     { ruta: '/calendario', texto: 'Calendario' },
+    { ruta: '/ausencias', texto: 'Ausencias' }, // NUEVO
     { ruta: '/mi-perfil', texto: 'Mi perfil' },
     { ruta: '/mi-cuenta', texto: 'Mi cuenta' },
   ],
   inspector: BASE,
-  
+
   supervisor: [
     { ruta: '/inicio', texto: 'Inicio' },
     { ruta: '/supervisor/revision-trabajadores', texto: 'Revisión de trabajadores' },
@@ -50,7 +51,6 @@ export const MENU_POR_ROL: Record<string, ItemMenu[]> = {
     { ruta: '/mi-cuenta', texto: 'Mi cuenta' },
     { ruta: '/supervisor/catalogos', texto: 'Categorías y zonas' },
   ],
-
 };
 
 export const ACCESOS_POR_ROL: Record<string, Acceso[]> = {
@@ -66,10 +66,11 @@ export const ACCESOS_POR_ROL: Record<string, Acceso[]> = {
     { texto: 'Mis ofertas', descripcion: 'Seguimiento de lo que ofertaste', ruta: '/mis-ofertas' },
     { texto: 'Mis trabajos', descripcion: 'Avance, incrementos y cobros', ruta: '/trabajos' },
     { texto: 'Mi calendario', descripcion: 'Tus trabajos por día y hora', ruta: '/calendario' },
+    { texto: 'Mis ausencias', descripcion: 'Bloquea fechas en las que no puedes trabajar', ruta: '/ausencias' }, // NUEVO
     { texto: 'Reclamos', descripcion: 'Reclamos sobre tus trabajos', ruta: '/reclamos-trabajador' },
   ],
   inspector: [{ texto: 'Mis inspecciones', descripcion: 'Visitas asignadas y resultados' }],
-  
+
   supervisor: [
     {
       texto: 'Revisión de trabajadores',
@@ -91,7 +92,6 @@ export const ACCESOS_POR_ROL: Record<string, Acceso[]> = {
     },
   ],
 
-  
   super_supervisor: [
     {
       texto: 'Revisión de trabajadores',
@@ -115,7 +115,6 @@ export const ACCESOS_POR_ROL: Record<string, Acceso[]> = {
       descripcion: 'Trabajos, ingresos y flujo económico',
     },
   ],
-
 };
 
 export const NOMBRE_ROL: Record<string, string> = {

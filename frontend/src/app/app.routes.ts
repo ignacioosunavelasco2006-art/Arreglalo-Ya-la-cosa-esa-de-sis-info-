@@ -81,6 +81,12 @@ export const routes: Routes = [
         canActivate: [rolGuard('trabajador')],
         loadComponent: () => import('./pages/trabajador/calendario').then((m) => m.CalendarioPagina),
       },
+      // NUEVO
+      {
+        path: 'ausencias',
+        canActivate: [rolGuard('trabajador')],
+        loadComponent: () => import('./pages/trabajador/ausencias').then((m) => m.AusenciasPage),
+      },
       {
         path: 'reclamos-trabajador',
         canActivate: [rolGuard('trabajador')],
@@ -104,36 +110,21 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/perfil-trabajador').then((m) => m.PerfilTrabajador),
       },
 
-      
-// ---------- Supervisor ----------
-{
-  path: 'supervisor/revision-trabajadores',
-  canActivate: [rolGuard('supervisor', 'super_supervisor')],
-  loadComponent: () =>
-    import('./pages/supervisor/revision-trabajadores')
-      .then((m) => m.RevisionTrabajadores),
-},
-
+      // ---------- Supervisor ----------
+      {
+        path: 'supervisor/revision-trabajadores',
+        canActivate: [rolGuard('supervisor', 'super_supervisor')],
+        loadComponent: () =>
+          import('./pages/supervisor/revision-trabajadores').then((m) => m.RevisionTrabajadores),
+      },
+      {
+        path: 'supervisor/catalogos',
+        canActivate: [rolGuard('supervisor', 'super_supervisor')],
+        loadComponent: () =>
+          import('./pages/supervisor/catalogos-admin').then((m) => m.CatalogosAdmin),
+      },
     ],
   },
 
-
-
-// ---------- Supervisor ----------
-{
-  path: 'supervisor/revision-trabajadores',
-  canActivate: [rolGuard('supervisor', 'super_supervisor')],
-  loadComponent: () =>
-    import('./pages/supervisor/revision-trabajadores')
-      .then((m) => m.RevisionTrabajadores),
-},
-{
-  path: 'supervisor/catalogos',
-  canActivate: [rolGuard('supervisor', 'super_supervisor')],
-  loadComponent: () =>
-    import('./pages/supervisor/catalogos-admin')
-      .then((m) => m.CatalogosAdmin),
-},
   { path: '**', redirectTo: '' },
 ];
-
