@@ -342,3 +342,28 @@ export interface PerfilRevisionDetalle extends PerfilRevision {
   documentos: DocumentoTrabajador[];
   tiene_datos_bancarios: boolean;
 }
+
+
+// ---------- Panel de rendimiento ----------
+export interface RendimientoFila {
+  id_usuario: number;
+  nombres: string;
+  apellidos: string;
+  trabajos_realizados: number;
+  cancelaciones: number;
+  canceladas_por_trabajador: number;
+  ingresos: number;
+  calificacion_promedio: number | null;
+  total_calificaciones: number;
+}
+
+export interface RendimientoRespuesta {
+  filtros: { desde: string | null; hasta: string | null };
+  totales: {
+    trabajos_realizados: number;
+    cancelaciones: number;
+    ingresos: number;
+    calificacion_promedio: number | null;
+  };
+  trabajadores: RendimientoFila[];
+}
