@@ -22,6 +22,7 @@ import { VistaTrabajosPrecioTotal } from '../entities/vista-trabajos-precio-tota
 
 import { SistemaService } from '../sistema/sistema.service';
 import { PagosService } from '../pagos/pagos.service';
+import { TrabajadoresService } from '../trabajadores/trabajadores.service'; // NUEVO
 
 import { AceptarOfertaDto } from './dto/aceptar-oferta.dto';
 import { ActualizarEstadoTrabajoDto } from './dto/actualizar-estado-trabajo.dto';
@@ -70,6 +71,7 @@ export class TrabajosService {
     private readonly dataSource: DataSource,
     private readonly sistema: SistemaService,
     private readonly pagosService: PagosService,
+    private readonly trabajadoresService: TrabajadoresService, // NUEVO
     @InjectRepository(PerfilTrabajador)
     private readonly perfilRepository: Repository<PerfilTrabajador>,
     @InjectRepository(SolicitudServicio)
@@ -107,7 +109,11 @@ export class TrabajosService {
       dto.fecha_inicio_prog,
       dto.fecha_fin_prog,
     );
-
+   if (!inicio || !fin) {
+      throw new BadRequestException(
+        'Debes indicar fecha_inicio_prog y fecha_fin_prog para aceptar la oferta',
+      );
+    }
     try {
       const trabajo = await this.trabajoRepository.manager.transaction(
         async (manager) => {
@@ -177,8 +183,20 @@ export class TrabajosService {
             precioFinal = Number(visita.precio_definitivo);
           }
 
-          // RN-11: el trabajador no puede tener trabajos que se crucen
+          // RN-11: el trabajador no puede tener ausencias ni trabajos que se crucen
           if (inicio && fin) {
+            // NUEVO: ausencia registrada por el trabajador
+            const ausencia = await this.trabajadoresService.tieneAusencia(
+              oferta.id_trabajador,
+              inicio,
+              fin,
+            );
+            if (ausencia) {
+              throw new ConflictException(
+                'El trabajador no está disponible en esa fecha (ausencia registrada)',
+              );
+            }
+
             const choques = await manager
               .createQueryBuilder(Trabajo, 't')
               .where('t.id_trabajador = :idTrabajador', {
