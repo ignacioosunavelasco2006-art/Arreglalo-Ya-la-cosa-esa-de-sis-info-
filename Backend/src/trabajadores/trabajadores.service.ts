@@ -31,7 +31,8 @@ import { ActualizarDisponibilidadDto } from './dto/actualizar-disponibilidad.dto
 import { CrearInspeccionDto } from './dto/crear-inspeccion.dto';
 import { RegistrarResultadoDto } from './dto/registrar-resultado.dto';
 import { ReprogramarInspeccionDto } from './dto/reprogramar-inspeccion.dto';
-import { RendimientoQueryDto } from './dto/rendimiento-query.dto';
+import { AusenciaTrabajador } from '../entities/ausencia-trabajador.entity';
+import { CrearAusenciaDto } from './dto/crear-ausencia.dto';
 
 const REGEX_HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -62,6 +63,8 @@ export class TrabajadoresService {
     private readonly disponibilidadRepository: Repository<DisponibilidadTrabajador>,
     @InjectRepository(Inspeccion)
     private readonly inspeccionRepository: Repository<Inspeccion>,
+    @InjectRepository(AusenciaTrabajador)
+    private readonly ausenciaRepository: Repository<AusenciaTrabajador>,
   ) {}
 
   // ===============================================================
@@ -302,6 +305,81 @@ export class TrabajadoresService {
     return this.disponibilidadRepository.save(bloque);
   }
 
+  // ---------------- Ausencias ----------------
+
+  async crearAusencia(idUsuario: number, dto: CrearAusenciaDto, forzar = false) {
+    await this.buscarPerfil(idUsuario);
+    const inicio = this.convertirFecha(dto.fecha_inicio);
+    const fin = this.convertirFecha(dto.fecha_fin);
+    if (fin <= inicio) throw new BadRequestException('La fecha fin debe ser posterior al inicio');
+    if (fin.getTime() <= Date.now()) throw new BadRequestException('La ausencia no puede estar en el pasado');
+
+    const conflictos = await this.trabajosEnConflicto(idUsuario, inicio, fin);
+    if (conflictos.length > 0 && !forzar) {
+      throw new ConflictException({
+        message: 'Tienes trabajos programados en ese periodo',
+        trabajos: conflictos,
+      });
+    }
+
+    try {
+      const guardada = await this.ausenciaRepository.save(
+        this.ausenciaRepository.create({
+          id_trabajador: idUsuario,
+          fecha_inicio: inicio,
+          fecha_fin: fin,
+          motivo: dto.motivo ?? null,
+        }),
+      );
+      await this.sistema.auditar(idUsuario, 'ausencia_registrada', 'ausencias_trabajador', guardada.id_ausencia);
+      return guardada;
+    } catch (error) {
+      const code = (error as any)?.code ?? (error as any)?.driverError?.code;
+      if (code === '23P01') throw new ConflictException('Ya tienes una ausencia registrada en ese periodo');
+      throw error;
+    }
+  }
+
+  async obtenerAusencias(idTrabajador: number) {
+    await this.buscarPerfil(idTrabajador);
+    return this.ausenciaRepository.find({
+      where: { id_trabajador: idTrabajador, estado: 'activa' },
+      order: { fecha_inicio: 'ASC' },
+    });
+  }
+
+  async cancelarAusencia(idUsuario: number, idAusencia: number) {
+    const ausencia = await this.ausenciaRepository.findOne({ where: { id_ausencia: idAusencia } });
+    if (!ausencia) throw new NotFoundException('Ausencia no encontrada');
+    if (ausencia.id_trabajador !== idUsuario) throw new ForbiddenException('Esa ausencia no es tuya');
+    ausencia.estado = 'cancelada';
+    return this.ausenciaRepository.save(ausencia);
+  }
+
+  // Lo usa trabajos.service.ts para bloquear la aceptación
+  async tieneAusencia(idTrabajador: number, inicio: Date, fin: Date) {
+    const [fila] = await this.dataSource.query(
+      `SELECT id_ausencia, fecha_inicio, fecha_fin FROM ausencias_trabajador
+        WHERE id_trabajador = $1 AND estado = 'activa'
+          AND fecha_inicio < $3 AND fecha_fin > $2
+        LIMIT 1`,
+      [idTrabajador, inicio, fin],
+    );
+    return fila ?? null;
+  }
+
+  async trabajosEnConflicto(idTrabajador: number, inicio: Date, fin: Date) {
+    return this.dataSource.query(
+      `SELECT id_trabajo, fecha_inicio_prog, fecha_fin_prog, estado FROM trabajos
+        WHERE id_trabajador = $1
+          AND estado IN ('pendiente_anticipo','programado','en_camino','en_proceso')
+          AND fecha_inicio_prog IS NOT NULL
+          AND fecha_inicio_prog < $3
+          AND COALESCE(fecha_fin_prog, fecha_inicio_prog + interval '2 hours') > $2`,
+      [idTrabajador, inicio, fin],
+    );
+  }
+
   // ===============================================================
   // CONSULTA PÚBLICA (RF-06, RF-12, CU-06, CU-12)
   // Nunca expone carnet, documentos, motivo de rechazo ni revisor.
@@ -337,11 +415,16 @@ export class TrabajadoresService {
     const filas: any[] = await this.dataSource.query(
       `SELECT p.id_usuario, u.nombres, u.apellidos, p.descripcion, p.anios_experiencia,
               p.foto_perfil, p.calificacion_promedio::float AS calificacion_promedio,
-              p.total_calificaciones, (u.estado = 'activa') AS disponible
+              p.total_calificaciones,
+              (u.estado = 'activa' AND NOT EXISTS (
+                 SELECT 1 FROM ausencias_trabajador a
+                  WHERE a.id_trabajador = p.id_usuario AND a.estado = 'activa'
+                    AND CURRENT_TIMESTAMP BETWEEN a.fecha_inicio AND a.fecha_fin
+              )) AS disponible
          FROM perfiles_trabajador p
          JOIN usuarios u ON u.id_usuario = p.id_usuario
         WHERE ${cond.join(' AND ')}
-        ORDER BY (u.estado = 'activa') DESC, p.calificacion_promedio DESC, p.total_calificaciones DESC
+        ORDER BY disponible DESC, p.calificacion_promedio DESC, p.total_calificaciones DESC
         LIMIT 100`,
       params,
     );
@@ -384,7 +467,12 @@ export class TrabajadoresService {
     const [fila]: any[] = await this.dataSource.query(
       `SELECT p.id_usuario, u.nombres, u.apellidos, p.descripcion, p.anios_experiencia,
               p.foto_perfil, p.calificacion_promedio::float AS calificacion_promedio,
-              p.total_calificaciones, (u.estado = 'activa') AS disponible
+              p.total_calificaciones,
+              (u.estado = 'activa' AND NOT EXISTS (
+                 SELECT 1 FROM ausencias_trabajador a
+                  WHERE a.id_trabajador = p.id_usuario AND a.estado = 'activa'
+                    AND CURRENT_TIMESTAMP BETWEEN a.fecha_inicio AND a.fecha_fin
+              )) AS disponible
          FROM perfiles_trabajador p
          JOIN usuarios u ON u.id_usuario = p.id_usuario
         WHERE p.id_usuario = $1 AND p.estado_verificacion = 'aprobado' AND u.estado <> 'eliminada'`,

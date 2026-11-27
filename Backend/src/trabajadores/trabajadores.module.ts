@@ -12,6 +12,7 @@ import { TrabajadorCategoria } from '../entities/trabajador-categoria.entity';
 import { TrabajadorZona } from '../entities/trabajador-zona.entity';
 import { DisponibilidadTrabajador } from '../entities/disponibilidad-trabajador.entity';
 import { Inspeccion } from '../entities/inspeccion.entity';
+import { AusenciaTrabajador } from '../entities/ausencia-trabajador.entity';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { Inspeccion } from '../entities/inspeccion.entity';
       TrabajadorZona,
       DisponibilidadTrabajador,
       Inspeccion,
+      AusenciaTrabajador,
     ]),
   ],
   controllers: [TrabajadoresController],

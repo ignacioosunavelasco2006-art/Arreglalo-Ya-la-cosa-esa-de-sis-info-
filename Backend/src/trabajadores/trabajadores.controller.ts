@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete, // NUEVO
   Get,
   Param,
   ParseIntPipe,
@@ -19,6 +20,7 @@ import { AsignarCategoriasDto } from './dto/asignar-categorias.dto';
 import { AsignarZonasDto } from './dto/asignar-zonas.dto';
 import { CrearDisponibilidadDto } from './dto/crear-disponibilidad.dto';
 import { ActualizarDisponibilidadDto } from './dto/actualizar-disponibilidad.dto';
+import { CrearAusenciaDto } from './dto/crear-ausencia.dto'; // NUEVO
 import { CrearInspeccionDto } from './dto/crear-inspeccion.dto';
 import { RegistrarResultadoDto } from './dto/registrar-resultado.dto';
 import { ReprogramarInspeccionDto } from './dto/reprogramar-inspeccion.dto';
@@ -96,12 +98,31 @@ export class TrabajadoresController {
   ) {
     return this.trabajadoresService.actualizarDisponibilidad(id, idDisponibilidad, dto);
   }
-  // Panel de rendimiento del propio trabajador (el id sale del token, nunca de la URL)
-  @Roles('trabajador')
-  @Get('mi-perfil/rendimiento')
-  miRendimiento(@CurrentUser('id_usuario') id: number, @Query() filtros: RendimientoQueryDto) {
-    return this.trabajadoresService.obtenerRendimiento(filtros, id);
+
+  // ================= MIS AUSENCIAS ================= // NUEVO
+
+  @Get('mis-ausencias')
+  misAusencias(@CurrentUser('id_usuario') id: number) {
+    return this.trabajadoresService.obtenerAusencias(id);
   }
+
+  @Post('mis-ausencias')
+  crearAusencia(
+    @CurrentUser('id_usuario') id: number,
+    @Body() dto: CrearAusenciaDto,
+    @Query('forzar') forzar?: string,
+  ) {
+    return this.trabajadoresService.crearAusencia(id, dto, forzar === 'true');
+  }
+
+  @Delete('mis-ausencias/:idAusencia')
+  cancelarAusencia(
+    @CurrentUser('id_usuario') id: number,
+    @Param('idAusencia', ParseIntPipe) idAusencia: number,
+  ) {
+    return this.trabajadoresService.cancelarAusencia(id, idAusencia);
+  }
+
   // ================= INSPECCIONES (rutas fijas) =================
 
   @Roles('inspector')
