@@ -7,6 +7,7 @@ import {
   PerfilPublico,
   PerfilRevision,
   PerfilRevisionDetalle,
+  RendimientoRespuesta,
 } from './modelos';
 
 @Injectable({ providedIn: 'root' })
@@ -52,5 +53,28 @@ export class TrabajadoresService {
         ...(motivo_rechazo ? { motivo_rechazo } : {}),
       },
     );
+  }
+
+  // SUPERVISIÓN: panel de rendimiento de todos los trabajadores (filtros opcionales)
+  rendimiento(desde?: string, hasta?: string, idTrabajador?: number) {
+    return this.http.get<RendimientoRespuesta>(`${API_URL}/trabajadores/rendimiento`, {
+      params: this.paramsRendimiento(desde, hasta, idTrabajador),
+    });
+  }
+
+  // TRABAJADOR: su propio panel (el backend toma el id del token)
+  miRendimiento(desde?: string, hasta?: string) {
+    return this.http.get<RendimientoRespuesta>(`${API_URL}/trabajadores/mi-perfil/rendimiento`, {
+      params: this.paramsRendimiento(desde, hasta),
+    });
+  }
+
+  // Solo se envían los parámetros con valor (el backend rechaza campos desconocidos o vacíos inválidos)
+  private paramsRendimiento(desde?: string, hasta?: string, idTrabajador?: number) {
+    let params = new HttpParams();
+    if (desde) params = params.set('desde', desde);
+    if (hasta) params = params.set('hasta', hasta);
+    if (idTrabajador) params = params.set('id_trabajador', idTrabajador);
+    return params;
   }
 }

@@ -25,6 +25,7 @@ import { CrearInspeccionDto } from './dto/crear-inspeccion.dto';
 import { RegistrarResultadoDto } from './dto/registrar-resultado.dto';
 import { ReprogramarInspeccionDto } from './dto/reprogramar-inspeccion.dto';
 import { BuscarTrabajadoresDto } from './dto/buscar-trabajadores.dto';
+import { RendimientoQueryDto } from './dto/rendimiento-query.dto';
 
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser, UsuarioAutenticado } from '../auth/decorators/current-user.decorator';
@@ -160,7 +161,12 @@ export class TrabajadoresController {
   }
 
   // ================= BÚSQUEDA Y PERFIL PÚBLICO (usuario con sesión) =================
-
+  // Panel de rendimiento de todos los trabajadores (filtros: desde, hasta, id_trabajador)
+  @Roles(...SUPERVISION)
+  @Get('rendimiento')
+  rendimiento(@Query() filtros: RendimientoQueryDto) {
+    return this.trabajadoresService.obtenerRendimiento(filtros);
+  }
   // RF-12: filtros por habilidad, zona y calificación
   @Get()
   buscar(@Query() filtros: BuscarTrabajadoresDto) {
