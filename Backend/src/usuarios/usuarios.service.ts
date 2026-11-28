@@ -23,6 +23,7 @@ import { CrearUsuarioDto } from './dto/crear-usuario.dto';
 import { CrearStaffDto } from './dto/crear-staff.dto';
 import { ActualizarUsuarioDto } from './dto/actualizar-usuario.dto';
 import { GuardarDatosBancariosDto } from './dto/datos-bancarios.dto';
+import { CambiarContrasenaDto } from './dto/cambiar-contrasena.dto'; 
 
 const ROLES_INTERNOS = ['supervisor', 'super_supervisor', 'inspector'];
 const ESTADOS_TRABAJO_VIVO = ['pendiente_anticipo', 'programado', 'en_camino', 'en_proceso'];
@@ -322,5 +323,28 @@ export class UsuariosService {
       numero_cuenta: `****${d.ultimos_digitos}`,
       fecha_actualizacion: d.fecha_actualizacion,
     };
+  }
+    async cambiarContrasena(id: number, dto: CambiarContrasenaDto) {
+    // contrasena_hash tiene select:false, por eso addSelect
+    const usuario = await this.usuarioRepository
+      .createQueryBuilder('u')
+      .addSelect('u.contrasena_hash')
+      .where('u.id_usuario = :id', { id })
+      .getOne();
+    if (!usuario || usuario.estado === 'eliminada') {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (!(await bcrypt.compare(dto.contrasena_actual, usuario.contrasena_hash))) {
+      throw new BadRequestException('La contraseña actual es incorrecta');
+    }
+    if (dto.contrasena_actual === dto.contrasena_nueva) {
+      throw new BadRequestException('La contraseña nueva debe ser distinta de la actual');
+    }
+
+    usuario.contrasena_hash = await bcrypt.hash(dto.contrasena_nueva, 10);
+    await this.usuarioRepository.save(usuario);
+    await this.sistema.auditar(id, 'contrasena_cambiada', 'usuarios', id);
+    return { mensaje: 'Contraseña actualizada' };
   }
 }

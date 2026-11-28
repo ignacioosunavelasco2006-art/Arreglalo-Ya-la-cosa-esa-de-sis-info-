@@ -14,8 +14,7 @@ import { mensajeDeError } from '../core/errores';
       <div class="row justify-content-center">
         <div class="col-12 col-md-6 col-lg-5">
           <h1 class="h3 text-center mb-1">Arréglalo Ya</h1>
-          <p class="text-center text-muted mb-4">Inicia sesión para continuar</p>
-
+<p class="text-center text-white mb-4">Inicia sesión para continuar</p>
           @if (sesionExpirada) {
             <div class="alert alert-warning">Tu sesión venció. Vuelve a iniciar sesión.</div>
           }
@@ -56,54 +55,6 @@ import { mensajeDeError } from '../core/errores';
         </div>
       </div>
     </div>
-  `,
-    styles: `
-    :host {
-      display: block;
-      min-height: 100vh;
-    }
-h1 {
-  font-size: 2.4rem;
-  font-weight: 800;
-  letter-spacing: -0.5px;
-  color: #ffffff;
-}
-p.text-muted {
-  color: rgba(255, 255, 255, 0.8) !important;
-  font-size: 1.05rem;
-}
-    .card {
-      border: none;
-      border-radius: 16px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-    }
-.btn-primary {
-  --bs-btn-bg: #f59e0b;
-  --bs-btn-border-color: #f59e0b;
-  --bs-btn-hover-bg: #d98a06;
-  --bs-btn-hover-border-color: #d98a06;
-  --bs-btn-color: #1f2937;
-  --bs-btn-hover-color: #1f2937;
-  padding: 0.7rem;
-  font-weight: 600;
-  border-radius: 10px;
-}
-    .form-control {
-      padding: 0.7rem 0.9rem;
-      border-radius: 10px;
-    }
-      p.mt-3 {
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 1rem;
-}
-p.mt-3 a {
-  color: #f59e0b;
-  font-weight: 600;
-  text-decoration: none;
-}
-p.mt-3 a:hover {
-  text-decoration: underline;
-}
   `,
 })
 export class Login {

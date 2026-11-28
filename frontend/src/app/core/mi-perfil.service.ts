@@ -1,3 +1,4 @@
+
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 
@@ -10,7 +11,6 @@ export interface DatosPerfil {
   anios_experiencia?: number;
 }
 
-// Todo lo que el trabajador hace sobre SU propio perfil (el backend lo identifica por el token).
 @Injectable({ providedIn: 'root' })
 export class MiPerfilService {
   private http = inject(HttpClient);
@@ -28,8 +28,29 @@ export class MiPerfilService {
     return this.http.patch(this.base, datos);
   }
 
+  subirFotoPerfil(foto: File) {
+    const formData = new FormData();
+    formData.append('foto', foto);
+
+    return this.http.post<PerfilPrivado>(
+      `${this.base}/foto-perfil`,
+      formData
+    );
+  }
+
+  fotoUrl(ruta: string | null): string {
+    if (!ruta) return '';
+
+    if (ruta.startsWith('http')) return ruta;
+
+    return `${API_URL.replace(/\/$/, '')}${ruta}`;
+  }
+
   subirDocumento(tipo: string, ruta_archivo: string) {
-    return this.http.post<DocumentoTrabajador>(`${this.base}/documentos`, { tipo, ruta_archivo });
+    return this.http.post<DocumentoTrabajador>(
+      `${this.base}/documentos`,
+      { tipo, ruta_archivo }
+    );
   }
 
   asignarCategorias(categorias: { id_categoria: number; precio_estimado?: number }[]) {
@@ -41,19 +62,27 @@ export class MiPerfilService {
   }
 
   enviarRevision() {
-    return this.http.post<{ mensaje: string; estado_verificacion: string }>(`${this.base}/enviar-revision`, {});
+    return this.http.post<{ mensaje: string; estado_verificacion: string }>(
+      `${this.base}/enviar-revision`,
+      {}
+    );
   }
 
-  // ---- Disponibilidad semanal ----
   disponibilidad() {
     return this.http.get<BloqueDisponibilidad[]>(`${this.base}/disponibilidad`);
   }
 
   crearBloque(datos: { dia_semana: number; hora_inicio: string; hora_fin: string }) {
-    return this.http.post<BloqueDisponibilidad>(`${this.base}/disponibilidad`, datos);
+    return this.http.post<BloqueDisponibilidad>(
+      `${this.base}/disponibilidad`,
+      datos
+    );
   }
 
   actualizarBloque(id: number, datos: { activa: boolean }) {
-    return this.http.patch<BloqueDisponibilidad>(`${this.base}/disponibilidad/${id}`, datos);
+    return this.http.patch<BloqueDisponibilidad>(
+      `${this.base}/disponibilidad/${id}`,
+      datos
+    );
   }
 }

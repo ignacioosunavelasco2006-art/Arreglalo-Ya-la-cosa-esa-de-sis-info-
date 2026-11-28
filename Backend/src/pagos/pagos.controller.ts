@@ -11,6 +11,7 @@ import { ResolverDevolucionDto } from './dto/resolver-devolucion.dto';
 
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser, type UsuarioAutenticado } from '../auth/decorators/current-user.decorator';
+import { ResolverDisputaEfectivoDto } from './dto/resolver-disputa-efectivo.dto';
 
 const SUPERVISION = ['supervisor', 'super_supervisor'] as const;
 
@@ -82,6 +83,13 @@ export class PagosController {
     return this.pagosService.listarDevoluciones(estado);
   }
 
+  // NUEVO: pagos en efectivo que el trabajador marcó como no recibidos (CU-24)
+  @Roles(...SUPERVISION)
+  @Get('disputas')
+  listarDisputasEfectivo() {
+    return this.pagosService.listarDisputasEfectivo();
+  }
+
   @Roles(...SUPERVISION)
   @Patch('devoluciones/:id/resolver')
   resolverDevolucion(
@@ -108,6 +116,17 @@ export class PagosController {
     @Body() dto: ConfirmarEfectivoDto,
   ) {
     return this.pagosService.confirmarEfectivo(id, idTrabajador, dto);
+  }
+
+  // NUEVO: el supervisor resuelve la disputa de efectivo (CU-24)
+  @Roles(...SUPERVISION)
+  @Patch(':id/disputa')
+  resolverDisputaEfectivo(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ResolverDisputaEfectivoDto,
+    @CurrentUser('id_usuario') idSupervisor: number,
+  ) {
+    return this.pagosService.resolverDisputaEfectivo(id, dto, idSupervisor);
   }
 
   @Get(':id/comprobante')

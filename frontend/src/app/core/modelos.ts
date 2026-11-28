@@ -80,6 +80,8 @@ export interface NuevaSolicitud {
   fecha_deseada: string; // ISO
   presupuesto_aproximado?: number;
   fotos?: string[]; // rutas devueltas por POST /archivos
+  es_urgente?: boolean;
+motivo_urgencia?: string;
 }
 
 export interface ResumenTrabajador {
@@ -311,41 +313,166 @@ export interface ArchivoSubido {
   tamano: number;
 }
 
+// ---------- Supervisión ----------
 
+export interface UsuarioLista {
+  id_usuario: number;
+  nombres: string;
+  apellidos: string;
+  correo: string;
+  telefono: string;
+  estado: string;
+  fecha_registro: string;
+  roles: string[];
+}
 
-// ---------- Supervisión de trabajadores ----------
-
-export interface PerfilRevision {
+// Elemento de la cola de revisión (no trae el nombre: se cruza con la lista de usuarios)
+export interface PerfilEnCola {
   id_usuario: number;
   carnet_identidad: string;
   descripcion: string | null;
   anios_experiencia: number;
   estado_verificacion: string;
   motivo_rechazo: string | null;
+  id_supervisor_revisor: number | null;
+  fecha_decision: string | null;
   calificacion_promedio: number;
   total_calificaciones: number;
-  fecha_creacion?: string;
+  fecha_creacion: string;
 }
 
-export interface PerfilRevisionDetalle extends PerfilRevision {
-  categorias: {
-    id_categoria: number;
-    nombre: string;
-    precio_estimado: number | null;
-  }[];
+export interface Inspeccion {
+  id_inspeccion: number;
+  id_trabajador: number;
+  id_supervisor: number;
+  id_inspector: number;
+  fecha_programada: string;
+  estado: string; // programada | realizada | reprogramada
+  resultado: string | null;
+  costo_transporte: number | null;
+  // Solo en la vista del inspector:
+  trabajador_nombre?: string;
+  trabajador_telefono?: string;
+  carnet_identidad?: string;
+}
 
-  zonas: {
-    id_zona: number;
-    nombre: string;
-  }[];
-
+export interface DetalleTrabajadorSupervisor extends PerfilEnCola {
+  categorias: { id_categoria: number; nombre: string; precio_estimado: number | null }[];
+  zonas: { id_zona: number; nombre: string }[];
   documentos: DocumentoTrabajador[];
   tiene_datos_bancarios: boolean;
+  inspecciones: Inspeccion[];
 }
 
+export interface Reclamo {
+  id_reclamo: number;
+  id_trabajo: number;
+  id_cliente: number;
+  id_supervisor: number | null;
+  descripcion: string;
+  estado: string; // abierto | en_revision | resuelto | improcedente
+  resolucion: string | null;
+  escalado_super: boolean;
+  fecha_reclamo: string;
+  fecha_resolucion: string | null;
+}
 
-// ---------- Panel de rendimiento ----------
-export interface RendimientoFila {
+export interface Evidencia {
+  id_evidencia: number;
+  id_reclamo: number;
+  ruta_archivo: string;
+}
+
+export interface ReclamoConEvidencias extends Reclamo {
+  evidencias: Evidencia[];
+}
+
+// Vista consolidada para el supervisor (filas crudas de la base de datos)
+export interface CasoReclamo {
+  reclamo: Reclamo;
+  evidencias: Evidencia[];
+  trabajo: {
+    id_trabajo: number;
+    id_cliente: number;
+    id_trabajador: number;
+    estado: string;
+    metodo_pago: string;
+    precio_final: string | number;
+    precio_total: number;
+    total_incrementos: number;
+    fecha_cierre: string | null;
+  };
+  historial: CambioEstado[];
+  incrementos: Incremento[];
+  finalizaciones: Finalizacion[];
+  pagos: Pago[];
+  devoluciones: Devolucion[];
+  calificacion: { puntaje: number; comentario: string | null; respuesta_trabajador: string | null } | null;
+}
+
+export interface Devolucion {
+  id_devolucion: number;
+  id_trabajo: number;
+  id_cliente: number;
+  id_reclamo: number | null;
+  id_pago: number | null;
+  monto: number;
+  motivo: string;
+  estado: string; // solicitada | aprobada | procesada | rechazada
+  motivo_rechazo: string | null;
+  fecha_solicitud: string;
+  fecha_aprobacion: string | null;
+  fecha_procesamiento: string | null;
+}
+
+export interface Incidente {
+  id_incidente: number;
+  id_trabajador: number;
+  id_trabajo: number;
+  tipo: string;
+  anulado: boolean;
+  id_supervisor_anula: number | null;
+  fecha: string;
+}
+
+export interface Suspension {
+  id_suspension: number;
+  id_usuario: number;
+  tipo: string; // voluntaria | automatica | sancion
+  motivo: string | null;
+  dias_duracion: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+  estado: string; // vigente | finalizada | levantada
+  id_reclamo: number | null;
+  id_supervisor: number | null;
+}
+
+export interface ZonaAdmin {
+  id_zona: number;
+  nombre: string;
+  activa: boolean;
+  trabajadores_asignados: number;
+}
+
+export interface ItemBitacora {
+  id_bitacora: string;
+  id_usuario: number | null;
+  accion: string;
+  entidad: string | null;
+  id_entidad: number | null;
+  detalle: string | null;
+  fecha: string;
+}
+
+export interface Reporte {
+  periodo: { desde: string; hasta: string };
+  resumen: Record<string, unknown>;
+  detalle: Record<string, unknown>[];
+}
+// ---------- Rendimiento de trabajadores ----------
+
+export interface RendimientoTrabajador {
   id_usuario: number;
   nombres: string;
   apellidos: string;
@@ -365,5 +492,5 @@ export interface RendimientoRespuesta {
     ingresos: number;
     calificacion_promedio: number | null;
   };
-  trabajadores: RendimientoFila[];
+  trabajadores: RendimientoTrabajador[];
 }

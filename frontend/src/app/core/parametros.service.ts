@@ -28,4 +28,14 @@ export class ParametrosService {
       }),
     );
   }
+
+  // Valor numérico tal cual (ej. dias_devolucion = 3)
+  numero(clave: string, defecto: number) {
+    return this.todos().pipe(
+      map((lista) => {
+        const valor = Number(lista.find((p) => p.clave === clave)?.valor.replace(',', '.'));
+        return Number.isFinite(valor) ? valor : defecto;
+      }),
+    );
+  }
 }

@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import {
-  ArrayMaxSize, IsArray, IsDateString, IsInt, IsNumber, IsOptional, IsPositive, IsString, MaxLength, MinLength,
+  ArrayMaxSize, IsArray, IsDateString, IsInt, IsNumber, IsOptional, IsPositive, IsString, MaxLength, MinLength,IsBoolean,IsNotEmpty,ValidateIf,
 } from 'class-validator';
 
 // El cliente sale del token. RF-11: descripción, fotos, ubicación y fecha deseada.
@@ -26,4 +26,14 @@ export class CrearSolicitudDto {
   @IsOptional() @IsArray() @ArrayMaxSize(10)
   @IsString({ each: true }) @MaxLength(300, { each: true })
   fotos?: string[];
+    @IsOptional()
+  @IsBoolean()
+  es_urgente?: boolean;
+
+  @ValidateIf((dto) => dto.es_urgente === true)
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(10)
+  @MaxLength(500)
+  motivo_urgencia?: string;
 }

@@ -1,3 +1,4 @@
+
 import {
   Injectable,
   BadRequestException,
@@ -7,7 +8,13 @@ import {
 } from '@nestjs/common';
 
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, FindOptionsWhere, Not, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  Not,
+  Repository,
+} from 'typeorm';
 
 import { Usuario } from '../entities/usuario.entity';
 import { PerfilTrabajador } from '../entities/perfil-trabajador.entity';
@@ -33,6 +40,7 @@ import { SolicitarFinalizacionDto } from './dto/solicitar-finalizacion.dto';
 import { ResponderFinalizacionDto } from './dto/responder-finalizacion.dto';
 
 const METODOS_PAGO = ['plataforma', 'qr', 'efectivo'];
+
 const ESTADOS_TRABAJO = [
   'pendiente_anticipo',
   'programado',
@@ -42,6 +50,7 @@ const ESTADOS_TRABAJO = [
   'cancelado',
   'en_reclamo',
 ];
+
 // Estados en los que el trabajo ocupa la agenda del trabajador (RN-11)
 const ESTADOS_AGENDA = [
   'pendiente_anticipo',
@@ -49,15 +58,21 @@ const ESTADOS_AGENDA = [
   'en_camino',
   'en_proceso',
 ];
+
 // Estados en los que el trabajo está "en curso" (permite incrementos)
 const ESTADOS_EN_CURSO = ['programado', 'en_camino', 'en_proceso'];
+
 // Cambios de estado que puede hacer el trabajador
 const TRANSICIONES: Record<string, string[]> = {
   programado: ['en_camino', 'en_proceso'],
   en_camino: ['en_proceso'],
 };
+
 const ESTADOS_VISITA_ACTIVA = ['propuesta', 'aceptada', 'realizada'];
 const DIA_MS = 24 * 60 * 60 * 1000;
+
+// Recargo del 10 % para las solicitudes urgentes
+const RECARGO_URGENCIA = 0.10;
 
 export interface UsuarioContexto {
   id_usuario: number;
@@ -97,6 +112,7 @@ export class TrabajosService {
   // Aceptar una oferta (RF-14, RN-01): crea el trabajo en UNA transacción
   async aceptarOferta(idCliente: number, dto: AceptarOfertaDto) {
     const metodoPago = dto.metodo_pago ?? 'plataforma';
+
     if (!METODOS_PAGO.includes(metodoPago)) {
       throw new BadRequestException(
         `metodo_pago debe ser: ${METODOS_PAGO.join(', ')}`,
@@ -114,6 +130,7 @@ export class TrabajosService {
           const ofertaPrevia = await manager.findOne(Oferta, {
             where: { id_oferta: dto.id_oferta },
           });
+
           if (!ofertaPrevia) {
             throw new NotFoundException('Oferta no encontrada');
           }
@@ -123,14 +140,17 @@ export class TrabajosService {
             where: { id_solicitud: ofertaPrevia.id_solicitud },
             lock: { mode: 'pessimistic_write' },
           });
+
           if (!solicitud) {
             throw new NotFoundException('Solicitud no encontrada');
           }
+
           if (solicitud.id_cliente !== idCliente) {
             throw new ForbiddenException(
               'Solo el dueño de la solicitud puede aceptar ofertas',
             );
           }
+
           if (
             solicitud.estado !== 'abierta' ||
             solicitud.fecha_vencimiento.getTime() < Date.now()
@@ -141,6 +161,7 @@ export class TrabajosService {
           const oferta = await manager.findOne(Oferta, {
             where: { id_oferta: dto.id_oferta },
           });
+
           if (!oferta || oferta.estado !== 'pendiente') {
             throw new BadRequestException('La oferta ya no está pendiente');
           }
@@ -148,34 +169,61 @@ export class TrabajosService {
           const perfil = await manager.findOne(PerfilTrabajador, {
             where: { id_usuario: oferta.id_trabajador },
           });
+
           if (!perfil || perfil.estado_verificacion !== 'aprobado') {
             throw new BadRequestException(
               'El trabajador ya no está habilitado para trabajar',
             );
           }
+
           // P7 / RN-18: un trabajador suspendido deja de poder ser contratado
           const cuentaTrabajador = await manager.findOne(Usuario, {
             where: { id_usuario: oferta.id_trabajador },
           });
+
           if (!cuentaTrabajador || cuentaTrabajador.estado !== 'activa') {
             throw new BadRequestException(
               'El trabajador no está disponible por el momento',
             );
           }
 
-          // Precio final: el estimado, o el definitivo si hubo visita previa
-          let precioFinal = Number(oferta.precio_estimado);
+          // -------------------------------------------------------
+          // PRECIO Y RECARGO POR URGENCIA
+          // -------------------------------------------------------
+
+          // Precio base: el estimado, o el definitivo si hubo visita previa
+          let precioBase = Number(oferta.precio_estimado);
+
           if (oferta.requiere_visita) {
             const visita = await manager.findOne(VisitaPrevia, {
-              where: { id_oferta: oferta.id_oferta, estado: 'precio_aceptado' },
+              where: {
+                id_oferta: oferta.id_oferta,
+                estado: 'precio_aceptado',
+              },
             });
+
             if (!visita || !visita.precio_definitivo) {
               throw new BadRequestException(
                 'La oferta requiere una visita previa con precio aceptado',
               );
             }
-            precioFinal = Number(visita.precio_definitivo);
+
+            precioBase = Number(visita.precio_definitivo);
           }
+
+          // Calcular el recargo del 10 % si la solicitud es urgente
+          const recargoUrgencia = solicitud.es_urgente
+            ? Number((precioBase * RECARGO_URGENCIA).toFixed(2))
+            : 0;
+
+          // Precio final incluyendo el recargo
+          const precioFinal = Number(
+            (precioBase + recargoUrgencia).toFixed(2),
+          );
+
+          // -------------------------------------------------------
+          // VALIDACIÓN DE AGENDA
+          // -------------------------------------------------------
 
           // RN-11: el trabajador no puede tener trabajos que se crucen
           if (inicio && fin) {
@@ -194,6 +242,7 @@ export class TrabajosService {
                 { inicio, fin },
               )
               .getCount();
+
             if (choques > 0) {
               throw new ConflictException(
                 'El trabajador ya tiene un trabajo que se cruza con ese horario',
@@ -201,11 +250,16 @@ export class TrabajosService {
             }
           }
 
+          // -------------------------------------------------------
+          // ACTUALIZAR OFERTAS
+          // -------------------------------------------------------
+
           await manager.update(
             Oferta,
             { id_oferta: oferta.id_oferta },
             { estado: 'aceptada' },
           );
+
           await manager.update(
             Oferta,
             {
@@ -216,13 +270,21 @@ export class TrabajosService {
             { estado: 'rechazada' },
           );
 
+          // -------------------------------------------------------
+          // CREAR TRABAJO CON EL DESGLOSE DEL PRECIO
+          // -------------------------------------------------------
+
           const nuevo = await manager.save(
             manager.create(Trabajo, {
               id_oferta: oferta.id_oferta,
               id_solicitud: solicitud.id_solicitud,
               id_cliente: solicitud.id_cliente,
               id_trabajador: oferta.id_trabajador,
+
+              precio_base: precioBase,
+              recargo_urgencia: recargoUrgencia,
               precio_final: precioFinal,
+
               metodo_pago: metodoPago,
               fecha_inicio_prog: inicio,
               fecha_fin_prog: fin,
@@ -247,18 +309,36 @@ export class TrabajosService {
         },
       );
 
-      // RF-35 "aceptaciones": avisa a ambas partes (el contacto por WhatsApp queda fuera del alcance)
+      // -----------------------------------------------------------
+      // NOTIFICACIONES
+      // -----------------------------------------------------------
+
+      const mensajePrecio =
+        Number(trabajo.recargo_urgencia) > 0
+          ? ` El precio incluye un recargo por urgencia de Bs ${Number(trabajo.recargo_urgencia).toFixed(2)}.`
+          : '';
+
+      // RF-35: notificar al trabajador
       await this.sistema.notificar(
         trabajo.id_trabajador,
         'oferta_aceptada',
-        `¡Tu oferta fue aceptada! Trabajo #${trabajo.id_trabajo}. Queda pendiente el anticipo del cliente.`,
+        `¡Tu oferta fue aceptada! Trabajo #${trabajo.id_trabajo}. Queda pendiente el anticipo del cliente.${mensajePrecio}`,
       );
+
+      // RF-35: notificar al cliente
       await this.sistema.notificar(
         idCliente,
         'pagar_anticipo',
-        `Aceptaste una oferta (trabajo #${trabajo.id_trabajo}). Paga el anticipo para programar el trabajo.`,
+        `Aceptaste una oferta (trabajo #${trabajo.id_trabajo}). Precio final: Bs ${Number(trabajo.precio_final).toFixed(2)}. Paga el anticipo para programar el trabajo.`,
       );
-      await this.sistema.auditar(idCliente, 'oferta_aceptada', 'trabajos', trabajo.id_trabajo, `oferta ${dto.id_oferta}, precio ${trabajo.precio_final}`);
+
+      await this.sistema.auditar(
+        idCliente,
+        'oferta_aceptada',
+        'trabajos',
+        trabajo.id_trabajo,
+        `oferta ${dto.id_oferta}, precio base ${trabajo.precio_base}, recargo urgencia ${trabajo.recargo_urgencia}, precio final ${trabajo.precio_final}`,
+      );
 
       return this.formatearTrabajo(trabajo);
     } catch (error) {
@@ -269,9 +349,13 @@ export class TrabajosService {
   // RF-21: historial del propio usuario (como cliente y/o como trabajador)
   async obtenerMisTrabajos(idUsuario: number, estado?: string) {
     if (estado && !ESTADOS_TRABAJO.includes(estado)) {
-      throw new BadRequestException(`estado debe ser: ${ESTADOS_TRABAJO.join(', ')}`);
+      throw new BadRequestException(
+        `estado debe ser: ${ESTADOS_TRABAJO.join(', ')}`,
+      );
     }
+
     const filtroEstado = estado ? { estado } : {};
+
     const trabajos = await this.trabajoRepository.find({
       where: [
         { id_cliente: idUsuario, ...filtroEstado },
@@ -279,28 +363,47 @@ export class TrabajosService {
       ],
       order: { fecha_creacion: 'DESC' },
     });
+
     return trabajos.map((t) => this.formatearTrabajo(t));
   }
 
   // Vista de supervisión (reportes, reclamos): todos los trabajos con filtros
-  async obtenerTodos(filtros: { id_cliente?: number; id_trabajador?: number; estado?: string }) {
+  async obtenerTodos(filtros: {
+    id_cliente?: number;
+    id_trabajador?: number;
+    estado?: string;
+  }) {
     const where: FindOptionsWhere<Trabajo> = {};
+
     if (filtros.id_cliente) where.id_cliente = filtros.id_cliente;
     if (filtros.id_trabajador) where.id_trabajador = filtros.id_trabajador;
+
     if (filtros.estado) {
       if (!ESTADOS_TRABAJO.includes(filtros.estado)) {
-        throw new BadRequestException(`estado debe ser: ${ESTADOS_TRABAJO.join(', ')}`);
+        throw new BadRequestException(
+          `estado debe ser: ${ESTADOS_TRABAJO.join(', ')}`,
+        );
       }
+
       where.estado = filtros.estado;
     }
-    const trabajos = await this.trabajoRepository.find({ where, order: { fecha_creacion: 'DESC' }, take: 200 });
+
+    const trabajos = await this.trabajoRepository.find({
+      where,
+      order: { fecha_creacion: 'DESC' },
+      take: 200,
+    });
+
     return trabajos.map((t) => this.formatearTrabajo(t));
   }
 
   // RF-19 / CU-19: calendario del trabajador, agrupado por día y hora (sin dirección exacta)
   async calendario(idTrabajador: number, desde?: string, hasta?: string) {
     const ini = desde ? this.convertirFecha(desde) : new Date();
-    const fin = hasta ? this.convertirFecha(hasta) : new Date(ini.getTime() + 30 * DIA_MS);
+    const fin = hasta
+      ? this.convertirFecha(hasta)
+      : new Date(ini.getTime() + 30 * DIA_MS);
+
     if (fin.getTime() <= ini.getTime()) {
       throw new BadRequestException('"hasta" debe ser posterior a "desde"');
     }
@@ -318,6 +421,7 @@ export class TrabajosService {
     );
 
     const porDia = new Map<string, any[]>();
+
     for (const t of trabajos) {
       const dia = new Date(t.fecha_inicio_prog).toISOString().slice(0, 10);
       porDia.set(dia, [...(porDia.get(dia) ?? []), t]);
@@ -327,7 +431,10 @@ export class TrabajosService {
       desde: ini.toISOString(),
       hasta: fin.toISOString(),
       total_trabajos: trabajos.length,
-      dias: [...porDia.entries()].map(([fecha, items]) => ({ fecha, trabajos: items })),
+      dias: [...porDia.entries()].map(([fecha, items]) => ({
+        fecha,
+        trabajos: items,
+      })),
     };
   }
 
@@ -363,8 +470,14 @@ export class TrabajosService {
       precio_total: vista
         ? Number(vista.precio_total)
         : Number(trabajo.precio_final),
-      // Las partes del trabajo sí pueden ver la dirección completa
+
+      // Las partes del trabajo pueden ver la dirección completa
       direccion_exacta: solicitud?.direccion_exacta ?? null,
+
+      // Información de urgencia
+      es_urgente: solicitud?.es_urgente ?? false,
+      motivo_urgencia: solicitud?.motivo_urgencia ?? null,
+
       historial,
       incrementos: incrementos.map((i) => this.formatearIncremento(i)),
       finalizaciones,
@@ -372,7 +485,11 @@ export class TrabajosService {
   }
 
   // El trabajador marca 'en_camino' o 'en_proceso'
-  async actualizarEstado(id: number, idTrabajador: number, dto: ActualizarEstadoTrabajoDto) {
+  async actualizarEstado(
+    id: number,
+    idTrabajador: number,
+    dto: ActualizarEstadoTrabajoDto,
+  ) {
     const trabajo = await this.buscarTrabajo(id);
 
     if (idTrabajador !== trabajo.id_trabajador) {
@@ -382,6 +499,7 @@ export class TrabajosService {
     }
 
     const permitidos = TRANSICIONES[trabajo.estado] ?? [];
+
     if (!permitidos.includes(dto.estado)) {
       throw new BadRequestException(
         `No se puede pasar de '${trabajo.estado}' a '${dto.estado}'`,
@@ -389,10 +507,12 @@ export class TrabajosService {
     }
 
     const anterior = trabajo.estado;
+
     const actualizado = await this.trabajoRepository.manager.transaction(
       async (manager) => {
         trabajo.estado = dto.estado;
         const guardado = await manager.save(trabajo);
+
         await this.registrarHistorial(
           manager,
           id,
@@ -400,17 +520,21 @@ export class TrabajosService {
           dto.estado,
           idTrabajador,
         );
+
         return guardado;
       },
     );
 
     // RF-35 "cambios de estado": el cliente se entera
-    const textoEstado = dto.estado === 'en_camino' ? 'va en camino' : 'comenzó el trabajo';
+    const textoEstado =
+      dto.estado === 'en_camino' ? 'va en camino' : 'comenzó el trabajo';
+
     await this.sistema.notificar(
       trabajo.id_cliente,
       `trabajo_${dto.estado}`,
       `Tu trabajo #${id}: el trabajador ${textoEstado}.`,
     );
+
     return this.formatearTrabajo(actualizado);
   }
 
@@ -425,14 +549,19 @@ export class TrabajosService {
     if (oferta.id_trabajador !== idTrabajador) {
       throw new ForbiddenException('La oferta pertenece a otro trabajador');
     }
+
     if (!oferta.requiere_visita) {
-      throw new BadRequestException('La oferta no está marcada como "requiere visita"');
+      throw new BadRequestException(
+        'La oferta no está marcada como "requiere visita"',
+      );
     }
+
     if (oferta.estado !== 'pendiente') {
       throw new BadRequestException('La oferta ya no está pendiente');
     }
 
     const fecha = this.convertirFecha(dto.fecha_propuesta);
+
     if (fecha.getTime() < Date.now()) {
       throw new BadRequestException('La fecha de la visita no puede ser pasada');
     }
@@ -440,6 +569,7 @@ export class TrabajosService {
     const activa = await this.visitaRepository.find({
       where: { id_oferta: dto.id_oferta },
     });
+
     if (activa.some((v) => ESTADOS_VISITA_ACTIVA.includes(v.estado))) {
       throw new ConflictException('La oferta ya tiene una visita en curso');
     }
@@ -448,14 +578,16 @@ export class TrabajosService {
       id_oferta: dto.id_oferta,
       fecha_propuesta: fecha,
     });
-    const guardada = await this.visitaRepository.save(visita);
 
+    const guardada = await this.visitaRepository.save(visita);
     const solicitud = await this.buscarSolicitud(oferta.id_solicitud);
+
     await this.sistema.notificar(
       solicitud.id_cliente,
       'visita_propuesta',
       `El trabajador propone una visita previa el ${fecha.toISOString().slice(0, 16).replace('T', ' ')} (solicitud #${solicitud.id_solicitud}). Acepta o rechaza la fecha.`,
     );
+
     return this.formatearVisita(guardada);
   }
 
@@ -475,28 +607,38 @@ export class TrabajosService {
       where: { id_oferta: idOferta },
       order: { fecha_propuesta: 'ASC' },
     });
+
     return visitas.map((v) => this.formatearVisita(v));
   }
 
   // Flujo: propuesta → aceptada → realizada → precio_aceptado (o cancelada)
-  async responderVisita(idVisita: number, idUsuario: number, dto: ResponderVisitaPreviaDto) {
+  async responderVisita(
+    idVisita: number,
+    idUsuario: number,
+    dto: ResponderVisitaPreviaDto,
+  ) {
     const visita = await this.visitaRepository.findOne({
       where: { id_visita: idVisita },
     });
+
     if (!visita) {
       throw new NotFoundException('Visita no encontrada');
     }
 
     const oferta = await this.buscarOferta(visita.id_oferta);
     const solicitud = await this.buscarSolicitud(oferta.id_solicitud);
+
     const esCliente = idUsuario === solicitud.id_cliente;
     const esTrabajador = idUsuario === oferta.id_trabajador;
 
     switch (dto.accion) {
       case 'aceptar_fecha':
         if (!esCliente) {
-          throw new ForbiddenException('Solo el cliente puede aceptar la fecha');
+          throw new ForbiddenException(
+            'Solo el cliente puede aceptar la fecha',
+          );
         }
+
         this.exigirEstadoVisita(visita, ['propuesta']);
         visita.estado = 'aceptada';
         visita.aceptada_cliente = true;
@@ -508,15 +650,19 @@ export class TrabajosService {
             'Solo el trabajador puede registrar el resultado',
           );
         }
+
         this.exigirEstadoVisita(visita, ['aceptada']);
+
         if (!dto.resultado?.trim() || dto.resultado.length > 500) {
           throw new BadRequestException(
             'resultado es obligatorio (máximo 500 caracteres)',
           );
         }
+
         if (!(dto.precio_definitivo! > 0)) {
           throw new BadRequestException('precio_definitivo debe ser mayor a 0');
         }
+
         visita.resultado = dto.resultado;
         visita.precio_definitivo = dto.precio_definitivo!;
         visita.estado = 'realizada';
@@ -524,8 +670,11 @@ export class TrabajosService {
 
       case 'aceptar_precio':
         if (!esCliente) {
-          throw new ForbiddenException('Solo el cliente puede aceptar el precio');
+          throw new ForbiddenException(
+            'Solo el cliente puede aceptar el precio',
+          );
         }
+
         this.exigirEstadoVisita(visita, ['realizada']);
         visita.estado = 'precio_aceptado';
         break;
@@ -535,7 +684,9 @@ export class TrabajosService {
         if (!esCliente) {
           throw new ForbiddenException('Solo el cliente puede rechazar');
         }
+
         this.exigirEstadoVisita(visita, ESTADOS_VISITA_ACTIVA);
+
         if (visita.estado === 'propuesta') visita.aceptada_cliente = false;
         visita.estado = 'cancelada';
         break;
@@ -550,16 +701,33 @@ export class TrabajosService {
 
     // Aviso a la otra parte según la acción
     const avisos: Record<string, { para: number; mensaje: string }> = {
-      aceptar_fecha: { para: oferta.id_trabajador, mensaje: 'El cliente aceptó la fecha de la visita previa.' },
+      aceptar_fecha: {
+        para: oferta.id_trabajador,
+        mensaje: 'El cliente aceptó la fecha de la visita previa.',
+      },
       registrar_resultado: {
         para: solicitud.id_cliente,
         mensaje: `El trabajador registró la visita y propone un precio definitivo de Bs ${Number(dto.precio_definitivo).toFixed(2)}. Acéptalo o recházalo.`,
       },
-      aceptar_precio: { para: oferta.id_trabajador, mensaje: 'El cliente aceptó el precio definitivo. Ya puede aceptar tu oferta.' },
-      rechazar: { para: oferta.id_trabajador, mensaje: 'El cliente rechazó la visita o el precio: se cancela sin costo.' },
+      aceptar_precio: {
+        para: oferta.id_trabajador,
+        mensaje: 'El cliente aceptó el precio definitivo. Ya puede aceptar tu oferta.',
+      },
+      rechazar: {
+        para: oferta.id_trabajador,
+        mensaje: 'El cliente rechazó la visita o el precio: se cancela sin costo.',
+      },
     };
+
     const aviso = avisos[dto.accion];
-    if (aviso) await this.sistema.notificar(aviso.para, `visita_${dto.accion}`, aviso.mensaje);
+
+    if (aviso) {
+      await this.sistema.notificar(
+        aviso.para,
+        `visita_${dto.accion}`,
+        aviso.mensaje,
+      );
+    }
 
     return this.formatearVisita(guardada);
   }
@@ -576,12 +744,15 @@ export class TrabajosService {
         'Solo el trabajador asignado puede solicitar incrementos',
       );
     }
+
     if (!ESTADOS_EN_CURSO.includes(trabajo.estado)) {
       throw new BadRequestException('El trabajo no está en curso');
     }
+
     if (!(dto.monto_adicional > 0)) {
       throw new BadRequestException('monto_adicional debe ser mayor a 0');
     }
+
     if (!dto.justificacion?.trim() || dto.justificacion.length > 500) {
       throw new BadRequestException(
         'justificacion es obligatoria (máximo 500 caracteres)',
@@ -591,6 +762,7 @@ export class TrabajosService {
     const pendiente = await this.incrementoRepository.findOne({
       where: { id_trabajo: dto.id_trabajo, estado: 'pendiente' },
     });
+
     if (pendiente) {
       throw new ConflictException(
         'Ya existe un incremento pendiente de respuesta para este trabajo',
@@ -606,13 +778,21 @@ export class TrabajosService {
         }),
       );
 
-      // RF-18: "el sistema debe notificar al cliente cualquier cambio propuesto"
+      // RF-18: notificar al cliente cualquier cambio propuesto
       await this.sistema.notificar(
         trabajo.id_cliente,
         'incremento_solicitado',
         `El trabajador pide un incremento de Bs ${Number(dto.monto_adicional).toFixed(2)} en el trabajo #${dto.id_trabajo}. Acéptalo o recházalo: el precio no cambia sin tu aprobación.`,
       );
-      await this.sistema.auditar(idTrabajador, 'incremento_solicitado', 'incrementos_precio', guardado.id_incremento, `monto ${dto.monto_adicional}`);
+
+      await this.sistema.auditar(
+        idTrabajador,
+        'incremento_solicitado',
+        'incrementos_precio',
+        guardado.id_incremento,
+        `monto ${dto.monto_adicional}`,
+      );
+
       return this.formatearIncremento(guardado);
     } catch (error) {
       return this.lanzarSiErrorBd(error);
@@ -627,6 +807,7 @@ export class TrabajosService {
       where: { id_trabajo: idTrabajo },
       order: { fecha_solicitud: 'ASC' },
     });
+
     return incrementos.map((i) => this.formatearIncremento(i));
   }
 
@@ -639,22 +820,27 @@ export class TrabajosService {
     const incremento = await this.incrementoRepository.findOne({
       where: { id_incremento: idIncremento },
     });
+
     if (!incremento) {
       throw new NotFoundException('Incremento no encontrado');
     }
 
     const trabajo = await this.buscarTrabajo(incremento.id_trabajo);
+
     if (idCliente !== trabajo.id_cliente) {
       throw new ForbiddenException(
         'Solo el cliente del trabajo puede responder el incremento',
       );
     }
+
     if (incremento.estado !== 'pendiente') {
       throw new BadRequestException('El incremento ya fue respondido');
     }
+
     if (typeof dto.aceptar !== 'boolean') {
       throw new BadRequestException('aceptar debe ser true o false');
     }
+
     if (!ESTADOS_EN_CURSO.includes(trabajo.estado)) {
       throw new BadRequestException('El trabajo ya no está en curso');
     }
@@ -671,6 +857,7 @@ export class TrabajosService {
         ? `El cliente aceptó el incremento de Bs ${Number(incremento.monto_adicional).toFixed(2)} (trabajo #${trabajo.id_trabajo}).`
         : `El cliente rechazó el incremento (trabajo #${trabajo.id_trabajo}): se mantiene el precio anterior.`,
     );
+
     await this.sistema.auditar(
       idCliente,
       dto.aceptar ? 'incremento_aceptado' : 'incremento_rechazado',
@@ -678,6 +865,7 @@ export class TrabajosService {
       idIncremento,
       `monto ${incremento.monto_adicional}`,
     );
+
     return this.formatearIncremento(guardado);
   }
 
@@ -685,7 +873,10 @@ export class TrabajosService {
   // FINALIZACIÓN (RF-20, RN-06)
   // ---------------------------------------------------------------
 
-  async solicitarFinalizacion(idTrabajador: number, dto: SolicitarFinalizacionDto) {
+  async solicitarFinalizacion(
+    idTrabajador: number,
+    dto: SolicitarFinalizacionDto,
+  ) {
     const trabajo = await this.buscarTrabajo(dto.id_trabajo);
 
     if (idTrabajador !== trabajo.id_trabajador) {
@@ -693,6 +884,7 @@ export class TrabajosService {
         'Solo el trabajador asignado puede solicitar la finalización',
       );
     }
+
     if (trabajo.estado !== 'en_proceso') {
       throw new BadRequestException(
         "El trabajo debe estar 'en_proceso' para solicitar la finalización",
@@ -702,6 +894,7 @@ export class TrabajosService {
     const incrementoPendiente = await this.incrementoRepository.findOne({
       where: { id_trabajo: dto.id_trabajo, estado: 'pendiente' },
     });
+
     if (incrementoPendiente) {
       throw new BadRequestException(
         'Hay un incremento de precio pendiente de respuesta del cliente',
@@ -711,6 +904,7 @@ export class TrabajosService {
     const finalizacionPendiente = await this.finalizacionRepository.findOne({
       where: { id_trabajo: dto.id_trabajo, estado: 'pendiente' },
     });
+
     if (finalizacionPendiente) {
       throw new ConflictException(
         'Ya hay una solicitud de finalización pendiente',
@@ -726,6 +920,7 @@ export class TrabajosService {
       'finalizacion_solicitada',
       `El trabajador indica que terminó el trabajo #${dto.id_trabajo}. Revisa el resultado y confírmalo o recházalo.`,
     );
+
     return guardada;
   }
 
@@ -738,25 +933,33 @@ export class TrabajosService {
     const finalizacion = await this.finalizacionRepository.findOne({
       where: { id_finalizacion: idFinalizacion },
     });
+
     if (!finalizacion) {
-      throw new NotFoundException('Solicitud de finalización no encontrada');
+      throw new NotFoundException(
+        'Solicitud de finalización no encontrada',
+      );
     }
 
     const trabajo = await this.buscarTrabajo(finalizacion.id_trabajo);
+
     if (idCliente !== trabajo.id_cliente) {
       throw new ForbiddenException(
         'Solo el cliente del trabajo puede responder la solicitud',
       );
     }
+
     if (finalizacion.estado !== 'pendiente') {
       throw new BadRequestException('La solicitud ya fue respondida');
     }
+
     if (typeof dto.aceptar !== 'boolean') {
       throw new BadRequestException('aceptar debe ser true o false');
     }
+
     if (trabajo.estado !== 'en_proceso') {
       throw new BadRequestException("El trabajo ya no está 'en_proceso'");
     }
+
     if (
       !dto.aceptar &&
       (!dto.motivo_rechazo?.trim() || dto.motivo_rechazo.length > 300)
@@ -766,42 +969,60 @@ export class TrabajosService {
       );
     }
 
-    const resultado = await this.trabajoRepository.manager.transaction(async (manager) => {
-      finalizacion.fecha_respuesta = new Date();
+    const resultado = await this.trabajoRepository.manager.transaction(
+      async (manager) => {
+        finalizacion.fecha_respuesta = new Date();
 
-      if (dto.aceptar) {
-        finalizacion.estado = 'aceptada';
-        const anterior = trabajo.estado;
-        trabajo.estado = 'terminado';
-        // Desde aquí corren los 7 días para presentar un reclamo (RN-07)
-        trabajo.fecha_cierre = new Date();
-        await manager.save(trabajo);
-        await this.registrarHistorial(
-          manager,
-          trabajo.id_trabajo,
-          anterior,
-          'terminado',
-          idCliente,
-        );
-      } else {
-        finalizacion.estado = 'rechazada';
-        finalizacion.motivo_rechazo = dto.motivo_rechazo ?? null;
-      }
+        if (dto.aceptar) {
+          finalizacion.estado = 'aceptada';
 
-      const guardada = await manager.save(finalizacion);
-      return { finalizacion: guardada, estado_trabajo: trabajo.estado };
-    });
+          const anterior = trabajo.estado;
+          trabajo.estado = 'terminado';
+
+          // Desde aquí corren los 7 días para presentar un reclamo (RN-07)
+          trabajo.fecha_cierre = new Date();
+
+          await manager.save(trabajo);
+
+          await this.registrarHistorial(
+            manager,
+            trabajo.id_trabajo,
+            anterior,
+            'terminado',
+            idCliente,
+          );
+        } else {
+          finalizacion.estado = 'rechazada';
+          finalizacion.motivo_rechazo = dto.motivo_rechazo ?? null;
+        }
+
+        const guardada = await manager.save(finalizacion);
+
+        return {
+          finalizacion: guardada,
+          estado_trabajo: trabajo.estado,
+        };
+      },
+    );
 
     if (dto.aceptar) {
       // RF-20 → RF-25: el cierre dispara el cobro del saldo y la liquidación al trabajador
       // (menos la comisión). Si falla, el trabajo ya quedó terminado y se alerta a supervisión.
       const pago = await this.pagosService.procesarCierre(trabajo.id_trabajo);
+
       await this.sistema.notificar(
         trabajo.id_trabajador,
         'trabajo_terminado',
         `El cliente confirmó el trabajo #${trabajo.id_trabajo}.`,
       );
-      await this.sistema.auditar(idCliente, 'finalizacion_aceptada', 'trabajos', trabajo.id_trabajo);
+
+      await this.sistema.auditar(
+        idCliente,
+        'finalizacion_aceptada',
+        'trabajos',
+        trabajo.id_trabajo,
+      );
+
       return { ...resultado, pago };
     }
 
@@ -810,7 +1031,15 @@ export class TrabajosService {
       'finalizacion_rechazada',
       `El cliente rechazó la finalización del trabajo #${trabajo.id_trabajo}: ${dto.motivo_rechazo}. El trabajo continúa.`,
     );
-    await this.sistema.auditar(idCliente, 'finalizacion_rechazada', 'trabajos', trabajo.id_trabajo, dto.motivo_rechazo ?? null);
+
+    await this.sistema.auditar(
+      idCliente,
+      'finalizacion_rechazada',
+      'trabajos',
+      trabajo.id_trabajo,
+      dto.motivo_rechazo ?? null,
+    );
+
     return resultado;
   }
 
@@ -822,9 +1051,11 @@ export class TrabajosService {
     const trabajo = await this.trabajoRepository.findOne({
       where: { id_trabajo: id },
     });
+
     if (!trabajo) {
       throw new NotFoundException('Trabajo no encontrado');
     }
+
     return trabajo;
   }
 
@@ -832,9 +1063,11 @@ export class TrabajosService {
     const oferta = await this.ofertaRepository.findOne({
       where: { id_oferta: id },
     });
+
     if (!oferta) {
       throw new NotFoundException('Oferta no encontrada');
     }
+
     return oferta;
   }
 
@@ -842,20 +1075,27 @@ export class TrabajosService {
     const solicitud = await this.solicitudRepository.findOne({
       where: { id_solicitud: id },
     });
+
     if (!solicitud) {
       throw new NotFoundException('Solicitud no encontrada');
     }
+
     return solicitud;
   }
 
   private esSupervisor(usuario: UsuarioContexto) {
-    return usuario.roles.includes('supervisor') || usuario.roles.includes('super_supervisor');
+    return (
+      usuario.roles.includes('supervisor') ||
+      usuario.roles.includes('super_supervisor')
+    );
   }
 
   // Las partes del trabajo y la supervisión (que atiende reclamos)
   private verificarParte(trabajo: Trabajo, usuario: UsuarioContexto) {
     const esParte =
-      usuario.id_usuario === trabajo.id_cliente || usuario.id_usuario === trabajo.id_trabajador;
+      usuario.id_usuario === trabajo.id_cliente ||
+      usuario.id_usuario === trabajo.id_trabajador;
+
     if (!esParte && !this.esSupervisor(usuario)) {
       throw new ForbiddenException('No participa en este trabajo');
     }
@@ -892,29 +1132,40 @@ export class TrabajosService {
     if (!inicio && !fin) {
       return { inicio: null, fin: null };
     }
+
     if (!inicio || !fin) {
       throw new BadRequestException(
         'Debe enviar fecha_inicio_prog y fecha_fin_prog juntas',
       );
     }
+
     const fechaInicio = this.convertirFecha(inicio);
     const fechaFin = this.convertirFecha(fin);
+
     if (fechaFin.getTime() <= fechaInicio.getTime()) {
       throw new BadRequestException(
         'fecha_fin_prog debe ser posterior a fecha_inicio_prog',
       );
     }
+
     if (fechaInicio.getTime() < Date.now()) {
-      throw new BadRequestException('La fecha de inicio no puede ser pasada');
+      throw new BadRequestException(
+        'La fecha de inicio no puede ser pasada',
+      );
     }
+
     return { inicio: fechaInicio, fin: fechaFin };
   }
 
   private convertirFecha(valor: string) {
     const fecha = new Date(valor);
+
     if (!valor || isNaN(fecha.getTime())) {
-      throw new BadRequestException('La fecha no tiene un formato válido');
+      throw new BadRequestException(
+        'La fecha no tiene un formato válido',
+      );
     }
+
     return fecha;
   }
 
@@ -923,28 +1174,43 @@ export class TrabajosService {
     if (valor === undefined || valor === null || valor === '') {
       return undefined;
     }
+
     const numero = Number(valor);
+
     if (!Number.isInteger(numero)) {
-      throw new BadRequestException(`${campo} debe ser un número entero`);
+      throw new BadRequestException(
+        `${campo} debe ser un número entero`,
+      );
     }
+
     return numero;
   }
 
   private aEnteroRequerido(valor: unknown, campo: string) {
     const numero = this.aEnteroOpcional(valor, campo);
+
     if (numero === undefined) {
       throw new BadRequestException(`${campo} es obligatorio`);
     }
+
     return numero;
   }
 
   // PostgreSQL devuelve los NUMERIC como texto; se convierten a número
   private aNumero(valor: number | null) {
-    return valor === null || valor === undefined ? null : Number(valor);
+    return valor === null || valor === undefined
+      ? null
+      : Number(valor);
   }
 
+  // Formatear los precios del trabajo
   private formatearTrabajo(trabajo: Trabajo) {
-    return { ...trabajo, precio_final: Number(trabajo.precio_final) };
+    return {
+      ...trabajo,
+      precio_base: Number(trabajo.precio_base),
+      recargo_urgencia: Number(trabajo.recargo_urgencia),
+      precio_final: Number(trabajo.precio_final),
+    };
   }
 
   private formatearVisita(visita: VisitaPrevia) {
@@ -955,20 +1221,28 @@ export class TrabajosService {
   }
 
   private formatearIncremento(incremento: IncrementoPrecio) {
-    return { ...incremento, monto_adicional: Number(incremento.monto_adicional) };
+    return {
+      ...incremento,
+      monto_adicional: Number(incremento.monto_adicional),
+    };
   }
 
   // 23503 = clave foránea, 23505 = valor duplicado (índices únicos)
   private lanzarSiErrorBd(error: unknown): never {
     const codigo = (error as { code?: string }).code;
+
     if (codigo === '23505') {
       throw new ConflictException(
         'La operación entra en conflicto con un registro existente (por ejemplo, la solicitud ya tiene un trabajo vigente)',
       );
     }
+
     if (codigo === '23503') {
-      throw new BadRequestException('Alguno de los datos enviados no existe');
+      throw new BadRequestException(
+        'Alguno de los datos enviados no existe',
+      );
     }
+
     throw error;
   }
 }

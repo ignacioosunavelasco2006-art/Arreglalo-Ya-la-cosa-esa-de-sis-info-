@@ -21,13 +21,13 @@ function contrasenasCoinciden(grupo: AbstractControl): ValidationErrors | null {
 @Component({
   selector: 'app-registro',
   imports: [ReactiveFormsModule, RouterLink],
-  template: 
-  `
+  template: `
     <div class="container py-5">
       <div class="row justify-content-center">
         <div class="col-12 col-md-8 col-lg-6">
-<h1 class="h3 text-center mb-1 text-white">Crear cuenta</h1>
-<p class="text-center text-white-50 mb-4">Regístrate como cliente o como trabajador</p>
+<h1 class="text-center text-white">Crear cuenta</h1>
+<p class="text-center text-white">Regístrate como cliente o como trabajador</p>
+
           <div class="card shadow-sm">
             <div class="card-body p-4">
               <form [formGroup]="form" (ngSubmit)="registrar()" novalidate>
@@ -104,9 +104,9 @@ function contrasenasCoinciden(grupo: AbstractControl): ValidationErrors | null {
             </div>
           </div>
 
-<p class="text-center mt-3 text-white">
-  ¿Ya tienes cuenta? <a routerLink="/login" class="text-info">Inicia sesión</a>
-</p>
+          <p class="text-center mt-3">
+            ¿Ya tienes cuenta? <a routerLink="/login">Inicia sesión</a>
+          </p>
         </div>
       </div>
     </div>
