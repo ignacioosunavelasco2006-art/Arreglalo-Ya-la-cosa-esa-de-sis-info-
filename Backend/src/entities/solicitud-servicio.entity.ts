@@ -16,6 +16,12 @@ export class SolicitudServicio {
 
   @Column({ type: 'text' })
   descripcion: string;
+  
+    @Column({ type: 'boolean', default: false })
+  es_urgente: boolean;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  motivo_urgencia: string | null;
 
   @Column({ type: 'varchar', length: 250 })
   direccion_exacta: string;

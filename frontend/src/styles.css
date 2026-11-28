@@ -9,3 +9,8 @@ background-color: #0a2a5e;
   --bs-primary: #088388d0;
   --bs-primary-rgb: 31, 111, 92;
 }
+body {
+  background-color: #0a2a5e;
+  color: #fff; /* texto blanco fuera de las tarjetas */
+  font-family: 'Segoe UI', sans-serif;
+}

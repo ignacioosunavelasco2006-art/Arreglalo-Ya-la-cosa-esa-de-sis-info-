@@ -27,6 +27,7 @@ import { ConfirmarEfectivoDto } from './dto/confirmar-efectivo.dto';
 import { CancelarTrabajoDto } from './dto/cancelar-trabajo.dto';
 import { SolicitarDevolucionDto } from './dto/solicitar-devolucion.dto';
 import { ResolverDevolucionDto } from './dto/resolver-devolucion.dto';
+import { ResolverDisputaEfectivoDto } from './dto/resolver-disputa-efectivo.dto';
 
 const HORA_MS = 60 * 60 * 1000;
 const DIA_MS = 24 * HORA_MS;
@@ -312,7 +313,36 @@ export class PagosService {
     await this.sistema.auditar(idTrabajador, dto.recibido ? 'efectivo_confirmado' : 'efectivo_disputado', 'pagos', id_pago);
     return this.formatearPago(guardado);
   }
+  // CU-24: el supervisor ve los pagos en efectivo que el trabajador dijo no haber recibido
+  async listarDisputasEfectivo() {
+    const pagos = await this.pagoRepository.find({
+      where: { medio: 'efectivo', estado: 'en_disputa' },
+      order: { fecha_pago: 'ASC' },
+    });
+    return pagos.map((p) => this.formatearPago(p));
+  }
 
+  // CU-24: el supervisor decide si el efectivo se recibió o no
+  async resolverDisputaEfectivo(id_pago: number, dto: ResolverDisputaEfectivoDto, idSupervisor: number) {
+    const pago = await this.pagoRepository.findOne({ where: { id_pago } });
+    if (!pago) throw new NotFoundException('Pago no encontrado');
+    if (pago.medio !== 'efectivo' || pago.estado !== 'en_disputa') {
+      throw new BadRequestException('El pago no está en disputa');
+    }
+
+    const trabajo = await this.obtenerTrabajo(this.dataSource.manager, pago.id_trabajo);
+
+    pago.estado = dto.recibido ? 'confirmado' : 'rechazado';
+    const guardado = await this.pagoRepository.save(pago);
+
+    const resultado = dto.recibido ? 'se confirmó que el efectivo fue recibido' : 'se determinó que el efectivo no fue recibido';
+    const mensaje = `Disputa del pago en efectivo del trabajo #${trabajo.id_trabajo}: ${resultado}. Motivo: ${dto.motivo}`;
+    await this.sistema.notificar(trabajo.id_cliente, 'disputa_resuelta', mensaje);
+    await this.sistema.notificar(trabajo.id_trabajador, 'disputa_resuelta', mensaje);
+    await this.sistema.auditar(idSupervisor, dto.recibido ? 'disputa_efectivo_confirmada' : 'disputa_efectivo_rechazada', 'pagos', id_pago, dto.motivo);
+    return this.formatearPago(guardado);
+  }
+  
   // ===============================================================
   // LIQUIDACIÓN AL TRABAJADOR (RF-25, RN-03, RN-04, RN-19)
   // ===============================================================

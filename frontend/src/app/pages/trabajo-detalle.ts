@@ -8,9 +8,10 @@ import { AuthService } from '../core/auth.service';
 import { CalificacionesService } from '../core/calificaciones.service';
 import { mensajeDeError } from '../core/errores';
 import { NOMBRE_MEDIO_PAGO, NOMBRE_TIPO_PAGO } from '../core/estados';
-import { CalificacionRecibida, Finalizacion, Incremento, Pago, TrabajoDetalle } from '../core/modelos';
+import { CalificacionRecibida, Finalizacion, Incremento, Pago, Reclamo, TrabajoDetalle } from '../core/modelos';
 import { PagosService } from '../core/pagos.service';
 import { ParametrosService } from '../core/parametros.service';
+import { ReclamosService } from '../core/reclamos.service';
 import { TrabajosService } from '../core/trabajos.service';
 import { EstadoBadge } from '../shared/estado-badge';
 
@@ -131,11 +132,22 @@ const ESTADOS_CANCELABLES = ['pendiente_anticipo', 'programado', 'en_camino'];
           </div>
         }
 
-        @if (t.estado === 'terminado') {
-          <div class="alert alert-light border small">
-            Tienes 7 días desde el cierre del trabajo para presentar un reclamo si hubo problemas.
-            <span class="text-muted">(La pantalla de reclamos se agrega en la siguiente entrega.)</span>
-          </div>
+        @if (t.estado === 'terminado' || t.estado === 'en_reclamo') {
+          @if (reclamoDelTrabajo(); as r) {
+            <div class="alert alert-warning d-flex flex-wrap justify-content-between align-items-center gap-2">
+              <span>Presentaste un reclamo sobre este trabajo.</span>
+              <a class="btn btn-outline-dark btn-sm" [routerLink]="['/reclamos', r.id_reclamo]">Ver mi reclamo</a>
+            </div>
+          } @else if (puedeReclamar()) {
+            <div class="alert alert-light border small d-flex flex-wrap justify-content-between align-items-center gap-2">
+              <span>¿Hubo problemas? Puedes reclamar hasta el {{ limiteReclamo() | date: 'dd/MM/yyyy HH:mm' }}.</span>
+              <a class="btn btn-outline-danger btn-sm" routerLink="/reclamos/nuevo" [queryParams]="{ trabajo: t.id_trabajo }">
+                Presentar reclamo
+              </a>
+            </div>
+          } @else if (t.estado === 'terminado') {
+            <div class="alert alert-light border small">El plazo para presentar un reclamo sobre este trabajo ya venció.</div>
+          }
         }
       } @else if (t.estado === 'pendiente_anticipo') {
         <div class="alert alert-warning">Esperando que el cliente pague el anticipo.</div>
@@ -384,6 +396,7 @@ export class VerTrabajo {
   private pagosApi = inject(PagosService);
   private calificacionesApi = inject(CalificacionesService);
   private parametros = inject(ParametrosService);
+  private reclamosApi = inject(ReclamosService);
 
   private id = Number(this.ruta.snapshot.paramMap.get('id'));
 
@@ -392,6 +405,8 @@ export class VerTrabajo {
   porcentajeAnticipo = signal(0.25);
   puedeCalificar = signal(false);
   calificacionRecibida = signal<CalificacionRecibida | null>(null);
+  reclamoDelTrabajo = signal<Reclamo | null>(null);
+  diasReclamo = signal(7);
   internaEnviada = signal(false);
 
   cargando = signal(true);
@@ -412,6 +427,15 @@ export class VerTrabajo {
   finalizacionPendiente = computed<Finalizacion | undefined>(() =>
     this.trabajo()?.finalizaciones.find((f) => f.estado === 'pendiente'),
   );
+  // RN-07: el cliente puede reclamar hasta N días (7) después del cierre
+  limiteReclamo = computed(() => {
+    const cierre = this.trabajo()?.fecha_cierre;
+    return cierre ? new Date(new Date(cierre).getTime() + this.diasReclamo() * 86_400_000) : null;
+  });
+  puedeReclamar = computed(() => {
+    const limite = this.limiteReclamo();
+    return this.trabajo()?.estado === 'terminado' && !!limite && limite.getTime() > Date.now();
+  });
   enCurso = computed(() => ['programado', 'en_camino', 'en_proceso'].includes(this.trabajo()?.estado ?? ''));
   saldoEfectivoPendiente = computed(() =>
     this.pagos().find((p) => p.tipo === 'saldo' && p.medio === 'efectivo' && p.estado === 'pendiente'),
@@ -565,14 +589,17 @@ export class VerTrabajo {
       pagos: this.pagosApi.delTrabajo(this.id),
       // Si no se pueden leer los parámetros se usa el 25 % del informe
       anticipo: this.parametros.porcentaje('anticipo', 0.25).pipe(catchError(() => of(0.25))),
+      diasReclamo: this.parametros.numero('dias_reclamo', 7).pipe(catchError(() => of(7))),
     }).subscribe({
-      next: ({ trabajo, pagos, anticipo }) => {
+      next: ({ trabajo, pagos, anticipo, diasReclamo }) => {
         this.trabajo.set(trabajo);
         this.pagos.set(pagos);
         this.porcentajeAnticipo.set(anticipo);
+        this.diasReclamo.set(diasReclamo);
         this.cargando.set(false);
         this.revisarCalificacion(trabajo);
         this.revisarCalificacionRecibida(trabajo);
+        this.revisarReclamo(trabajo);
       },
       error: (e) => {
         this.error.set(mensajeDeError(e));
@@ -587,6 +614,16 @@ export class VerTrabajo {
     if (t.estado !== 'terminado' || t.id_cliente !== this.usuarioId()) return;
     this.calificacionesApi.pendientes().subscribe({
       next: (lista) => this.puedeCalificar.set(lista.some((x) => x.id_trabajo === t.id_trabajo)),
+      error: () => {},
+    });
+  }
+
+  // ¿El cliente ya presentó un reclamo sobre este trabajo?
+  private revisarReclamo(t: TrabajoDetalle) {
+    this.reclamoDelTrabajo.set(null);
+    if (t.id_cliente !== this.usuarioId() || !['terminado', 'en_reclamo'].includes(t.estado)) return;
+    this.reclamosApi.mios().subscribe({
+      next: (lista) => this.reclamoDelTrabajo.set(lista.find((r) => r.id_trabajo === t.id_trabajo) ?? null),
       error: () => {},
     });
   }

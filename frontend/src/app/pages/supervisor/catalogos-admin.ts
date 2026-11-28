@@ -1,374 +1,198 @@
-
-import { Component, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
+import { Component, inject, signal } from '@angular/core';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Observable, forkJoin } from 'rxjs';
 
 import { CatalogosService } from '../../core/catalogos.service';
 import { mensajeDeError } from '../../core/errores';
-import { Categoria, Zona } from '../../core/modelos';
+import { Categoria, ZonaAdmin } from '../../core/modelos';
 
+type Tipo = 'categoria' | 'zona';
+
+// RF-32 / CU-32: el supervisor crea, edita y desactiva categorías y zonas.
 @Component({
   selector: 'app-catalogos-admin',
-  imports: [FormsModule],
+  imports: [ReactiveFormsModule],
   template: `
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-      <div>
-        <h1 class="h3 mb-1">Administración de categorías y zonas</h1>
-        <p class="text-muted mb-0">Gestiona los servicios y las zonas disponibles.</p>
+    <h1 class="h3 mb-3">Categorías y zonas</h1>
+
+    @if (mensaje()) { <div class="alert alert-success py-2">{{ mensaje() }}</div> }
+    @if (error()) { <div class="alert alert-danger py-2">{{ error() }}</div> }
+
+    <div class="row g-4">
+      <!-- ===== Categorías ===== -->
+      <div class="col-12 col-lg-6">
+        <div class="card"><div class="card-body">
+          <h2 class="h5">Categorías de servicio</h2>
+          <ul class="list-group mb-3">
+            @for (c of categorias(); track c.id_categoria) {
+              <li class="list-group-item d-flex justify-content-between align-items-center gap-2" [class.text-muted]="!c.activa">
+                @if (editando()?.tipo === 'categoria' && editando()?.id === c.id_categoria) {
+                  <form class="d-flex gap-2 flex-grow-1" [formGroup]="formEdicion" (ngSubmit)="guardarNombre()">
+                    <input class="form-control form-control-sm" formControlName="nombre" aria-label="Nuevo nombre" />
+                    <button class="btn btn-primary btn-sm" type="submit">Guardar</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" (click)="editando.set(null)">X</button>
+                  </form>
+                } @else {
+                  <span>{{ c.nombre }} @if (!c.activa) { <span class="badge text-bg-secondary">Inactiva</span> }</span>
+                  <span class="text-nowrap">
+                    <button class="btn btn-link btn-sm" type="button" (click)="editar('categoria', c.id_categoria, c.nombre)">Renombrar</button>
+                    @if (c.activa) {
+                      <button class="btn btn-outline-danger btn-sm" type="button" (click)="desactivarCategoria(c)">Desactivar</button>
+                    } @else {
+                      <button class="btn btn-outline-success btn-sm" type="button" (click)="activarCategoria(c)">Activar</button>
+                    }
+                  </span>
+                }
+              </li>
+            }
+          </ul>
+          <form class="d-flex gap-2" [formGroup]="formCategoria" (ngSubmit)="crearCategoria()">
+            <input class="form-control form-control-sm" formControlName="nombre" placeholder="Nueva categoría" maxlength="60" />
+            <button class="btn btn-primary btn-sm" type="submit">Agregar</button>
+          </form>
+        </div></div>
       </div>
-      <button class="btn btn-outline-secondary" (click)="cargar()">Actualizar listas</button>
-    </div>
 
-    @if (error()) {
-      <div class="alert alert-danger">{{ error() }}</div>
-    }
-    @if (mensaje()) {
-      <div class="alert alert-success">{{ mensaje() }}</div>
-    }
-
-    <div class="btn-group mb-4" role="group" aria-label="Sección">
-      <button class="btn"
-        [class.btn-primary]="pestana() === 'categorias'"
-        [class.btn-outline-primary]="pestana() !== 'categorias'"
-        (click)="pestana.set('categorias')">
-        Categorías
-      </button>
-      <button class="btn"
-        [class.btn-primary]="pestana() === 'zonas'"
-        [class.btn-outline-primary]="pestana() !== 'zonas'"
-        (click)="pestana.set('zonas')">
-        Zonas
-      </button>
-    </div>
-
-    @if (cargando()) {
-      <p class="text-muted">Cargando información...</p>
-    } @else if (pestana() === 'categorias') {
-      <section class="card">
-        <div class="card-body">
-          <h2 class="h5 mb-3">Categorías de servicio</h2>
-
-          <form class="row g-2 mb-4" (ngSubmit)="guardarCategoria()">
-            <div class="col-12 col-md">
-              <label for="nombreCategoria" class="form-label">
-                {{ categoriaEditando() ? 'Editar categoría' : 'Nueva categoría' }}
-              </label>
-              <input
-                id="nombreCategoria"
-                class="form-control"
-                name="nombreCategoria"
-                [(ngModel)]="nombreCategoria"
-                minlength="2"
-                maxlength="60"
-                required
-                placeholder="Ej. Plomería"
-              />
-            </div>
-            <div class="col-12 col-md-auto d-flex align-items-end gap-2">
-              <button class="btn btn-primary" type="submit" [disabled]="guardando()">
-                {{ guardando() ? 'Guardando...' : categoriaEditando() ? 'Guardar cambios' : 'Agregar categoría' }}
-              </button>
-              @if (categoriaEditando()) {
-                <button class="btn btn-outline-secondary" type="button" (click)="cancelarEdicion()">
-                  Cancelar
-                </button>
-              }
-            </div>
-          </form>
-
-          <div class="table-responsive">
-            <table class="table table-hover align-middle">
-              <thead>
-                <tr>
-                  <th>Categoría</th>
-                  <th>Estado</th>
-                  <th class="text-end">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (c of categorias(); track c.id_categoria) {
-                  <tr>
-                    <td>{{ c.nombre }}</td>
-                    <td>
-                      @if (c.activa) {
-                        <span class="badge text-bg-success">Activa</span>
-                      } @else {
-                        <span class="badge text-bg-secondary">Inactiva</span>
-                      }
-                    </td>
-                    <td class="text-end">
-                      <button class="btn btn-sm btn-outline-primary me-2"
-                        (click)="editarCategoria(c)">
-                        Editar
-                      </button>
-                      @if (c.activa) {
-                        <button class="btn btn-sm btn-outline-danger"
-                          (click)="cambiarEstadoCategoria(c, false)">
-                          Desactivar
-                        </button>
-                      } @else {
-                        <button class="btn btn-sm btn-outline-success"
-                          (click)="cambiarEstadoCategoria(c, true)">
-                          Activar
-                        </button>
-                      }
-                    </td>
-                  </tr>
-                } @empty {
-                  <tr><td colspan="3" class="text-center text-muted">No hay categorías registradas.</td></tr>
+      <!-- ===== Zonas ===== -->
+      <div class="col-12 col-lg-6">
+        <div class="card"><div class="card-body">
+          <h2 class="h5">Zonas / OTB</h2>
+          <ul class="list-group mb-3">
+            @for (z of zonas(); track z.id_zona) {
+              <li class="list-group-item d-flex justify-content-between align-items-center gap-2" [class.text-muted]="!z.activa">
+                @if (editando()?.tipo === 'zona' && editando()?.id === z.id_zona) {
+                  <form class="d-flex gap-2 flex-grow-1" [formGroup]="formEdicion" (ngSubmit)="guardarNombre()">
+                    <input class="form-control form-control-sm" formControlName="nombre" aria-label="Nuevo nombre" />
+                    <button class="btn btn-primary btn-sm" type="submit">Guardar</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" (click)="editando.set(null)">X</button>
+                  </form>
+                } @else {
+                  <span>
+                    {{ z.nombre }}
+                    <span class="small text-muted">· {{ z.trabajadores_asignados }} trabajador(es)</span>
+                    @if (!z.activa) { <span class="badge text-bg-secondary">Inactiva</span> }
+                  </span>
+                  <span class="text-nowrap">
+                    <button class="btn btn-link btn-sm" type="button" (click)="editar('zona', z.id_zona, z.nombre)">Renombrar</button>
+                    @if (z.activa) {
+                      <button class="btn btn-outline-danger btn-sm" type="button" (click)="desactivarZona(z)">Desactivar</button>
+                    } @else {
+                      <button class="btn btn-outline-success btn-sm" type="button" (click)="activarZona(z)">Activar</button>
+                    }
+                  </span>
                 }
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-    } @else {
-      <section class="card">
-        <div class="card-body">
-          <h2 class="h5 mb-3">Zonas de cobertura</h2>
-
-          <form class="row g-2 mb-4" (ngSubmit)="guardarZona()">
-            <div class="col-12 col-md">
-              <label for="nombreZona" class="form-label">
-                {{ zonaEditando() ? 'Editar zona' : 'Nueva zona' }}
-              </label>
-              <input
-                id="nombreZona"
-                class="form-control"
-                name="nombreZona"
-                [(ngModel)]="nombreZona"
-                minlength="2"
-                maxlength="100"
-                required
-                placeholder="Ej. Cala Cala"
-              />
-            </div>
-            <div class="col-12 col-md-auto d-flex align-items-end gap-2">
-              <button class="btn btn-primary" type="submit" [disabled]="guardando()">
-                {{ guardando() ? 'Guardando...' : zonaEditando() ? 'Guardar cambios' : 'Agregar zona' }}
-              </button>
-              @if (zonaEditando()) {
-                <button class="btn btn-outline-secondary" type="button" (click)="cancelarEdicion()">
-                  Cancelar
-                </button>
-              }
-            </div>
+              </li>
+            }
+          </ul>
+          <form class="d-flex gap-2" [formGroup]="formZona" (ngSubmit)="crearZona()">
+            <input class="form-control form-control-sm" formControlName="nombre" placeholder="Nueva zona u OTB" maxlength="100" />
+            <button class="btn btn-primary btn-sm" type="submit">Agregar</button>
           </form>
-
-          <div class="table-responsive">
-            <table class="table table-hover align-middle">
-              <thead>
-                <tr>
-                  <th>Zona</th>
-                  <th>Trabajadores asignados</th>
-                  <th>Estado</th>
-                  <th class="text-end">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (z of zonas(); track z.id_zona) {
-                  <tr>
-                    <td>{{ z.nombre }}</td>
-                    <td>{{ z.trabajadores_asignados }}</td>
-                    <td>
-                      @if (z.activa) {
-                        <span class="badge text-bg-success">Activa</span>
-                      } @else {
-                        <span class="badge text-bg-secondary">Inactiva</span>
-                      }
-                    </td>
-                    <td class="text-end">
-                      <button class="btn btn-sm btn-outline-primary me-2"
-                        (click)="editarZona(z)">
-                        Editar
-                      </button>
-                      @if (z.activa) {
-                        <button class="btn btn-sm btn-outline-danger"
-                          (click)="desactivarZona(z)">
-                          Desactivar
-                        </button>
-                      } @else {
-                        <button class="btn btn-sm btn-outline-success"
-                          (click)="cambiarEstadoZona(z, true)">
-                          Activar
-                        </button>
-                      }
-                    </td>
-                  </tr>
-                } @empty {
-                  <tr><td colspan="4" class="text-center text-muted">No hay zonas registradas.</td></tr>
-                }
-              </tbody>
-            </table>
+          <div class="form-text">
+            Los trabajadores pueden pedir zonas nuevas: te llega un aviso en las notificaciones.
           </div>
-        </div>
-      </section>
-    }
+        </div></div>
+      </div>
+    </div>
   `,
 })
 export class CatalogosAdmin {
+  private fb = inject(FormBuilder);
   private api = inject(CatalogosService);
 
-  pestana = signal<'categorias' | 'zonas'>('categorias');
   categorias = signal<Categoria[]>([]);
-  zonas = signal<(Zona & { trabajadores_asignados: number })[]>([]);
-
-  cargando = signal(false);
-  guardando = signal(false);
+  zonas = signal<ZonaAdmin[]>([]);
   error = signal<string | null>(null);
   mensaje = signal<string | null>(null);
+  editando = signal<{ tipo: Tipo; id: number } | null>(null);
 
-  categoriaEditando = signal<number | null>(null);
-  zonaEditando = signal<number | null>(null);
-
-  nombreCategoria = '';
-  nombreZona = '';
+  formCategoria = this.fb.nonNullable.group({ nombre: ['', [Validators.required, Validators.minLength(2)]] });
+  formZona = this.fb.nonNullable.group({ nombre: ['', [Validators.required, Validators.minLength(2)]] });
+  formEdicion = this.fb.nonNullable.group({ nombre: ['', [Validators.required, Validators.minLength(2)]] });
 
   constructor() {
     this.cargar();
   }
 
-  cargar() {
-    this.cargando.set(true);
-    this.error.set(null);
-
-    Promise.all([
-      this.api.categoriasTodas().toPromise(),
-      this.api.zonasTodas().toPromise(),
-    ]).then(([categorias, zonas]) => {
-      this.categorias.set(categorias ?? []);
-      this.zonas.set(zonas ?? []);
-      this.cargando.set(false);
-    }).catch((e: unknown) => {
-      this.error.set(mensajeDeError(e));
-      this.cargando.set(false);
-    });
+  crearCategoria() {
+    if (this.formCategoria.invalid) return;
+    this.accion(this.api.crearCategoria(this.formCategoria.getRawValue().nombre.trim()), 'Categoría creada.', () => this.formCategoria.reset());
   }
 
-  editarCategoria(c: Categoria) {
-    this.categoriaEditando.set(c.id_categoria);
-    this.nombreCategoria = c.nombre;
-    this.error.set(null);
-    this.mensaje.set(null);
+  crearZona() {
+    if (this.formZona.invalid) return;
+    this.accion(this.api.crearZona(this.formZona.getRawValue().nombre.trim()), 'Zona creada.', () => this.formZona.reset());
   }
 
-  cancelarEdicion() {
-    this.categoriaEditando.set(null);
-    this.zonaEditando.set(null);
-    this.nombreCategoria = '';
-    this.nombreZona = '';
+  editar(tipo: Tipo, id: number, nombre: string) {
+    this.formEdicion.setValue({ nombre });
+    this.editando.set({ tipo, id });
   }
 
-  guardarCategoria() {
-    const nombre = this.nombreCategoria.trim();
-    if (nombre.length < 2) return;
-
-    this.guardando.set(true);
-    this.error.set(null);
-
-    const id = this.categoriaEditando();
-    const peticion = id
-      ? this.api.actualizarCategoria(id, { nombre })
-      : this.api.crearCategoria(nombre);
-
-    peticion.subscribe({
-      next: () => {
-        this.mensaje.set(id ? 'Categoría actualizada.' : 'Categoría creada.');
-        this.cancelarEdicion();
-        this.guardando.set(false);
-        this.cargar();
-      },
-      error: (e) => this.fallo(e),
-    });
+  guardarNombre() {
+    const e = this.editando();
+    if (!e || this.formEdicion.invalid) return;
+    const nombre = this.formEdicion.getRawValue().nombre.trim();
+    const peticion = e.tipo === 'categoria' ? this.api.actualizarCategoria(e.id, { nombre }) : this.api.actualizarZona(e.id, { nombre });
+    this.accion(peticion, 'Nombre actualizado.', () => this.editando.set(null));
   }
 
-  cambiarEstadoCategoria(c: Categoria, activa: boolean) {
-    const accion = activa ? 'activar' : 'desactivar';
-    if (!confirm(`¿Seguro que deseas ${accion} la categoría "${c.nombre}"?`)) return;
-
-    this.api.actualizarCategoria(c.id_categoria, { activa }).subscribe({
-      next: () => {
-        this.mensaje.set(`Categoría ${activa ? 'activada' : 'desactivada'}.`);
-        this.cargar();
-      },
-      error: (e) => this.fallo(e),
-    });
+  desactivarCategoria(c: Categoria) {
+    if (!confirm(`¿Desactivar "${c.nombre}"? Dejará de ofrecerse en nuevas solicitudes.`)) return;
+    this.accion(this.api.desactivarCategoria(c.id_categoria), 'Categoría desactivada.');
   }
 
-  editarZona(z: Zona) {
-    this.zonaEditando.set(z.id_zona);
-    this.nombreZona = z.nombre;
+  activarCategoria(c: Categoria) {
+    this.accion(this.api.actualizarCategoria(c.id_categoria, { activa: true }), 'Categoría activada.');
+  }
+
+  activarZona(z: ZonaAdmin) {
+    this.accion(this.api.actualizarZona(z.id_zona, { activa: true }), 'Zona activada.');
+  }
+
+  // CU-32 flujo alterno: con trabajadores asignados el backend avisa (409) antes de desactivar
+  desactivarZona(z: ZonaAdmin) {
     this.error.set(null);
     this.mensaje.set(null);
-  }
-
-  guardarZona() {
-    const nombre = this.nombreZona.trim();
-    if (nombre.length < 2) return;
-
-    this.guardando.set(true);
-    this.error.set(null);
-
-    const id = this.zonaEditando();
-    const peticion = id
-      ? this.api.actualizarZona(id, { nombre })
-      : this.api.crearZona(nombre);
-
-    peticion.subscribe({
-      next: () => {
-        this.mensaje.set(id ? 'Zona actualizada.' : 'Zona creada.');
-        this.cancelarEdicion();
-        this.guardando.set(false);
-        this.cargar();
-      },
-      error: (e) => this.fallo(e),
-    });
-  }
-
-  cambiarEstadoZona(z: Zona, activa: boolean) {
-    if (!confirm(`¿Seguro que deseas activar la zona "${z.nombre}"?`)) return;
-
-    this.api.actualizarZona(z.id_zona, { activa }).subscribe({
-      next: () => {
-        this.mensaje.set('Zona activada.');
-        this.cargar();
-      },
-      error: (e) => this.fallo(e),
-    });
-  }
-
-  desactivarZona(z: Zona) {
-    if (!confirm(`¿Deseas desactivar la zona "${z.nombre}"?`)) return;
-
     this.api.desactivarZona(z.id_zona).subscribe({
-      next: () => {
-        this.mensaje.set('Zona desactivada.');
-        this.cargar();
-      },
+      next: () => this.terminado('Zona desactivada.'),
       error: (e: HttpErrorResponse) => {
-        const cuerpo = e.error;
-
-        if (e.status === 409 && cuerpo?.requiere_confirmacion) {
-          const detalle = cuerpo.message ?? 'Esta zona tiene asignaciones o solicitudes abiertas.';
-          if (confirm(`${detalle}\n\n¿Deseas continuar y desactivarla de todos modos?`)) {
-            this.api.desactivarZona(z.id_zona, true).subscribe({
-              next: () => {
-                this.mensaje.set('Zona desactivada con confirmación.');
-                this.cargar();
-              },
-              error: (err) => this.fallo(err),
-            });
+        if (e.status === 409 && e.error?.requiere_confirmacion) {
+          if (confirm(`${e.error.message}\n\n¿Desactivarla de todos modos?`)) {
+            this.accion(this.api.desactivarZona(z.id_zona, true), 'Zona desactivada.');
           }
-          return;
+        } else {
+          this.error.set(mensajeDeError(e));
         }
-
-        this.fallo(e);
       },
     });
   }
 
-  private fallo(e: unknown) {
-    this.error.set(mensajeDeError(e));
-    this.guardando.set(false);
+  private accion(peticion: Observable<unknown>, exito: string, alTerminar?: () => void) {
+    this.error.set(null);
+    this.mensaje.set(null);
+    peticion.subscribe({
+      next: () => {
+        alTerminar?.();
+        this.terminado(exito);
+      },
+      error: (e) => this.error.set(mensajeDeError(e)),
+    });
+  }
+
+  private terminado(mensaje: string) {
+    this.mensaje.set(mensaje);
+    this.cargar();
+  }
+
+  private cargar() {
+    forkJoin({ categorias: this.api.categoriasTodas(), zonas: this.api.zonasTodas() }).subscribe({
+      next: ({ categorias, zonas }) => {
+        this.categorias.set(categorias);
+        this.zonas.set(zonas);
+      },
+      error: (e) => this.error.set(mensajeDeError(e)),
+    });
   }
 }

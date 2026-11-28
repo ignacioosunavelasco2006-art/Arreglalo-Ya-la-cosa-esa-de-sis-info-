@@ -17,6 +17,7 @@ import { CrearStaffDto } from './dto/crear-staff.dto';
 import { ActualizarUsuarioDto } from './dto/actualizar-usuario.dto';
 import { GuardarDatosBancariosDto } from './dto/datos-bancarios.dto';
 
+import { CambiarContrasenaDto } from './dto/cambiar-contrasena.dto'; 
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser, type UsuarioAutenticado } from '../auth/decorators/current-user.decorator';
@@ -69,7 +70,14 @@ export class UsuariosController {
   desactivarMiCuenta(@CurrentUser() usuario: UsuarioAutenticado) {
     return this.usuariosService.desactivar(usuario.id_usuario, usuario);
   }
-
+  
+  @Patch('mi-cuenta/contrasena') // NUEVO
+  cambiarContrasena(
+    @CurrentUser('id_usuario') id: number,
+    @Body() dto: CambiarContrasenaDto,
+  ) {
+    return this.usuariosService.cambiarContrasena(id, dto);
+  }
   // CU-02: cambiar de función sin crear otra cuenta
   @Post('mi-cuenta/funciones/:rol')
   activarFuncion(

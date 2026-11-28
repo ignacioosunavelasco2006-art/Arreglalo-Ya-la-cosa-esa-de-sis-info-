@@ -15,6 +15,9 @@ import { BitacoraAuditoria } from '../entities/bitacora-auditoria.entity';
 import { CrearParametroDto } from './dto/crear-parametro.dto';
 import { ActualizarParametroDto } from './dto/actualizar-parametro.dto';
 
+import { Usuario } from '../entities/usuario.entity';
+import { CorreoService } from './correo.service';
+
 // CU-34: "valor fuera de rango, se rechaza".
 // ⚠ AJUSTA las claves a las que tengas en tu tabla parametros_sistema.
 // Los rangos de porcentajes están en "porcentaje entero" (5 = 5 %).
@@ -40,6 +43,10 @@ export class SistemaService {
     private readonly notificacionRepository: Repository<Notificacion>,
     @InjectRepository(BitacoraAuditoria)
     private readonly auditoriaRepository: Repository<BitacoraAuditoria>,
+    @InjectRepository(Usuario)
+private readonly usuarioRepository: Repository<Usuario>,
+
+private readonly correoService: CorreoService,
   ) {}
 
   // ---------------------------------------------------------------
@@ -47,26 +54,56 @@ export class SistemaService {
   // ---------------------------------------------------------------
 
   // RF-35: crea una notificación. Un fallo aquí nunca debe romper la operación principal.
-  async notificar(
-    idUsuario: number,
-    tipo: string,
-    mensaje: string,
-    canal = 'web',
-  ) {
-    try {
-      return await this.notificacionRepository.save(
-        this.notificacionRepository.create({
-          id_usuario: idUsuario,
-          tipo: tipo.slice(0, 40),
-          mensaje: mensaje.slice(0, 300),
-          canal,
-        }),
+  
+// RF-35: crea una notificación web y envía también un correo.
+async notificar(
+  idUsuario: number,
+  tipo: string,
+  mensaje: string,
+  canal = 'web',
+) {
+  try {
+    // 1. Guardar la notificación en la base de datos.
+    const notificacion = await this.notificacionRepository.save(
+      this.notificacionRepository.create({
+        id_usuario: idUsuario,
+        tipo: tipo.slice(0, 40),
+        mensaje: mensaje.slice(0, 300),
+        canal,
+      }),
+    );
+
+    // 2. Buscar el correo del usuario.
+const usuario = await this.usuarioRepository.findOne({
+  where: { id_usuario: idUsuario },
+  select: {
+    id_usuario: true,
+    correo: true,
+  },
+});
+
+    // 3. Enviar el correo si el usuario tiene una dirección registrada.
+    if (usuario?.correo) {
+      await this.correoService.enviarNotificacion(
+        usuario.correo,
+        `Arreglalo Ya - ${tipo}`,
+        mensaje,
       );
-    } catch (error) {
-      this.logger.warn(`No se pudo notificar al usuario ${idUsuario}: ${error}`);
-      return null;
+    } else {
+      this.logger.warn(
+        `El usuario ${idUsuario} no tiene un correo disponible.`,
+      );
     }
+
+    return notificacion;
+  } catch (error) {
+    this.logger.warn(
+      `No se pudo notificar al usuario ${idUsuario}: ${error}`,
+    );
+    return null;
   }
+}
+
 
   // RNF-07 / CU-01: deja huella de quién hizo qué y cuándo.
   async auditar(

@@ -55,57 +55,83 @@ export class SolicitudesService {
   // SOLICITUDES
   // ===============================================================
 
-  // RF-11 / CU-11: el cliente es el del token
-  async crearSolicitud(idCliente: number, dto: CrearSolicitudDto) {
-    const fechaDeseada = this.convertirFecha(dto.fecha_deseada);
-    if (fechaDeseada.getTime() < Date.now()) {
-      throw new BadRequestException('La fecha deseada no puede ser pasada');
-    }
-
-    await this.verificarUsuarioActivo(idCliente, 'Cliente no encontrado');
-
-    const dias = Math.round(await this.sistema.obtenerNumero('dias_vigencia_solicitud', DIAS_VIGENCIA_DEFECTO));
-    const vencimiento = new Date();
-    vencimiento.setDate(vencimiento.getDate() + dias);
-
-    const fotos = dto.fotos ?? [];
-
-    try {
-      const guardada = await this.dataSource.transaction(async (manager) => {
-        const solicitud = await manager.save(
-          manager.create(SolicitudServicio, {
-            id_cliente: idCliente,
-            id_categoria: dto.id_categoria,
-            id_zona: dto.id_zona,
-            descripcion: dto.descripcion.trim(),
-            direccion_exacta: dto.direccion_exacta.trim(),
-            fecha_deseada: fechaDeseada,
-            presupuesto_aproximado: dto.presupuesto_aproximado ?? null,
-            fecha_vencimiento: vencimiento,
-          }),
-        );
-
-        if (fotos.length > 0) {
-          await manager.save(
-            SolicitudFoto,
-            fotos.map((ruta) =>
-              manager.create(SolicitudFoto, { id_solicitud: solicitud.id_solicitud, ruta_archivo: ruta }),
-            ),
-          );
-        }
-        return solicitud;
-      });
-
-      await this.sistema.auditar(idCliente, 'solicitud_publicada', 'solicitudes_servicio', guardada.id_solicitud);
-      // P2: "Notificar a trabajadores disponibles"
-      await this.notificarTrabajadoresCompatibles(guardada);
-
-      return this.formatearSolicitud(guardada, true);
-    } catch (error) {
-      manejarErrorBd(error, 'La categoría o la zona no existe');
-    }
+// RF-11 / CU-11: el cliente es el del token
+async crearSolicitud(idCliente: number, dto: CrearSolicitudDto) {
+  const fechaDeseada = this.convertirFecha(dto.fecha_deseada);
+  if (fechaDeseada.getTime() < Date.now()) {
+    throw new BadRequestException('La fecha deseada no puede ser pasada');
   }
 
+  // Comprobar que el motivo esté presente si la solicitud es urgente
+  if (dto.es_urgente && !dto.motivo_urgencia?.trim()) {
+    throw new BadRequestException(
+      'Debes explicar por qué necesitas atención urgente',
+    );
+  }
+
+  await this.verificarUsuarioActivo(idCliente, 'Cliente no encontrado');
+
+  const dias = Math.round(
+    await this.sistema.obtenerNumero('dias_vigencia_solicitud', DIAS_VIGENCIA_DEFECTO),
+  );
+
+  const vencimiento = new Date();
+  vencimiento.setDate(vencimiento.getDate() + dias);
+
+  const fotos = dto.fotos ?? [];
+
+  try {
+    const guardada = await this.dataSource.transaction(async (manager) => {
+      const solicitud = await manager.save(
+        manager.create(SolicitudServicio, {
+          id_cliente: idCliente,
+          id_categoria: dto.id_categoria,
+          id_zona: dto.id_zona,
+          descripcion: dto.descripcion.trim(),
+          direccion_exacta: dto.direccion_exacta.trim(),
+          fecha_deseada: fechaDeseada,
+          presupuesto_aproximado: dto.presupuesto_aproximado ?? null,
+
+          // NUEVOS CAMPOS DE URGENCIA
+          es_urgente: dto.es_urgente ?? false,
+          motivo_urgencia: dto.es_urgente
+            ? dto.motivo_urgencia!.trim()
+            : null,
+
+          fecha_vencimiento: vencimiento,
+        }),
+      );
+
+      if (fotos.length > 0) {
+        await manager.save(
+          SolicitudFoto,
+          fotos.map((ruta) =>
+            manager.create(SolicitudFoto, {
+              id_solicitud: solicitud.id_solicitud,
+              ruta_archivo: ruta,
+            }),
+          ),
+        );
+      }
+
+      return solicitud;
+    });
+
+    await this.sistema.auditar(
+      idCliente,
+      'solicitud_publicada',
+      'solicitudes_servicio',
+      guardada.id_solicitud,
+    );
+
+    // P2: "Notificar a trabajadores disponibles"
+    await this.notificarTrabajadoresCompatibles(guardada);
+
+    return this.formatearSolicitud(guardada, true);
+  } catch (error) {
+    manejarErrorBd(error, 'La categoría o la zona no existe');
+  }
+}
   // Avisa a los trabajadores aprobados, activos, de esa categoría y zona
   private async notificarTrabajadoresCompatibles(solicitud: SolicitudServicio) {
     const destinatarios: { id_usuario: number }[] = await this.dataSource.query(

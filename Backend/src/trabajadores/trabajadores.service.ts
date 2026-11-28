@@ -18,7 +18,7 @@ import { Inspeccion } from '../entities/inspeccion.entity';
 
 import { SistemaService } from '../sistema/sistema.service';
 import { UsuariosService } from '../usuarios/usuarios.service';
-import { manejarErrorBd, redondear } from '../common/utilidades';
+import { manejarErrorBd } from '../common/utilidades';
 
 import { CrearPerfilTrabajadorDto } from './dto/crear-perfil-trabajador.dto';
 import { ActualizarPerfilTrabajadorDto } from './dto/actualizar-perfil-trabajador.dto';
@@ -31,8 +31,9 @@ import { ActualizarDisponibilidadDto } from './dto/actualizar-disponibilidad.dto
 import { CrearInspeccionDto } from './dto/crear-inspeccion.dto';
 import { RegistrarResultadoDto } from './dto/registrar-resultado.dto';
 import { ReprogramarInspeccionDto } from './dto/reprogramar-inspeccion.dto';
-import { RendimientoQueryDto } from './dto/rendimiento-query.dto';
-
+import { mkdir, writeFile } from 'fs/promises';
+import { join } from 'path';
+import { randomUUID } from 'crypto';
 const REGEX_HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export interface FiltrosBusqueda {
@@ -138,6 +139,43 @@ export class TrabajadoresService {
       manejarErrorBd(error, 'El carnet de identidad ya está registrado');
     }
   }
+  async subirFotoPerfil(idUsuario: number, foto: any) {
+  if (!foto) {
+    throw new BadRequestException('Debes seleccionar una fotografía');
+  }
+
+  const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp'];
+
+  if (!tiposPermitidos.includes(foto.mimetype)) {
+    throw new BadRequestException('Solo se permiten imágenes JPG, PNG o WebP');
+  }
+
+  if (foto.size > 5 * 1024 * 1024) {
+    throw new BadRequestException('La imagen no puede superar los 5 MB');
+  }
+
+  const perfil = await this.buscarPerfil(idUsuario);
+
+  const extensiones: Record<string, string> = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+  };
+
+  const nombreArchivo = `${randomUUID()}${extensiones[foto.mimetype]}`;
+
+  const carpeta = join(process.cwd(), 'uploads', 'fotos-perfil');
+
+  await mkdir(carpeta, { recursive: true });
+
+  await writeFile(join(carpeta, nombreArchivo), foto.buffer);
+
+  perfil.foto_perfil = `/uploads/fotos-perfil/${nombreArchivo}`;
+
+  const perfilActualizado = await this.perfilRepository.save(perfil);
+
+  return this.formatearPerfil(perfilActualizado);
+}
 
   // CU-04 paso 4: "envía el perfil a revisión". Si falta algo, el sistema no permite enviar.
   async enviarRevision(idUsuario: number) {
@@ -517,12 +555,23 @@ export class TrabajadoresService {
     return inspecciones.map((i) => this.formatearInspeccion(i));
   }
 
+  // Incluye los datos de contacto del trabajador a visitar (el inspector no puede consultar usuarios)
   async misInspecciones(idInspector: number) {
-    const inspecciones = await this.inspeccionRepository.find({
-      where: { id_inspector: idInspector },
-      order: { fecha_programada: 'DESC' },
-    });
-    return inspecciones.map((i) => this.formatearInspeccion(i));
+    const filas: any[] = await this.dataSource.query(
+      `SELECT i.id_inspeccion, i.id_trabajador, i.id_supervisor, i.id_inspector,
+              i.fecha_programada, i.estado, i.resultado,
+              i.costo_transporte::float AS costo_transporte,
+              u.nombres || ' ' || u.apellidos AS trabajador_nombre,
+              u.telefono AS trabajador_telefono,
+              p.carnet_identidad
+         FROM inspecciones i
+         JOIN usuarios u ON u.id_usuario = i.id_trabajador
+         JOIN perfiles_trabajador p ON p.id_usuario = i.id_trabajador
+        WHERE i.id_inspector = $1
+        ORDER BY i.fecha_programada DESC`,
+      [idInspector],
+    );
+    return filas;
   }
 
   // El inspector registra el resultado y el costo (o reprograma si el trabajador no estaba)
@@ -582,89 +631,7 @@ export class TrabajadoresService {
     await this.sistema.auditar(idSupervisor, 'inspeccion_reprogramada', 'inspecciones', idInspeccion);
     return this.formatearInspeccion(guardada);
   }
-  // ===============================================================
-  // PANEL DE RENDIMIENTO (indicadores por trabajador, con filtro de fechas)
-  // ===============================================================
 
-  // idTrabajadorFijo: lo envía el controlador cuando consulta un trabajador (id del token);
-  // en ese caso se ignora cualquier id_trabajador que venga en la URL.
-  async obtenerRendimiento(filtros: RendimientoQueryDto, idTrabajadorFijo?: number) {
-    const { desde, hasta } = filtros;
-    if (desde && hasta && desde.slice(0, 10) > hasta.slice(0, 10)) {
-      throw new BadRequestException('La fecha "desde" no puede ser posterior a "hasta"');
-    }
-    const idTrabajador = idTrabajadorFijo ?? filtros.id_trabajador ?? null;
-
-    // Tres subconsultas independientes (trabajos / cancelaciones / calificaciones).
-    // Si se unieran las tablas directamente, cada fila se multiplicaría y los conteos saldrían inflados.
-    // "hasta" es inclusivo: se compara contra (hasta + 1 día) con "<".
-    const filas: any[] = await this.dataSource.query(
-      `SELECT p.id_usuario, u.nombres, u.apellidos,
-              COALESCE(tr.realizados, 0)                AS trabajos_realizados,
-              COALESCE(ca.cancelaciones, 0)             AS cancelaciones,
-              COALESCE(ca.por_trabajador, 0)            AS canceladas_por_trabajador,
-              COALESCE(tr.ingresos, 0)::float           AS ingresos,
-              cal.promedio                              AS calificacion_promedio,
-              COALESCE(cal.total, 0)                    AS total_calificaciones
-         FROM perfiles_trabajador p
-         JOIN usuarios u ON u.id_usuario = p.id_usuario
-    LEFT JOIN (
-           SELECT t.id_trabajador,
-                  COUNT(*)::int AS realizados,
-                  SUM(v.precio_total) AS ingresos
-             FROM trabajos t
-             JOIN vista_trabajos_precio_total v ON v.id_trabajo = t.id_trabajo
-            WHERE t.estado = 'terminado'
-              AND ($1::date IS NULL OR t.fecha_cierre >= $1::date)
-              AND ($2::date IS NULL OR t.fecha_cierre <  $2::date + 1)
-            GROUP BY t.id_trabajador
-         ) tr ON tr.id_trabajador = p.id_usuario
-    LEFT JOIN (
-           SELECT t.id_trabajador,
-                  COUNT(*)::int AS cancelaciones,
-                  COUNT(*) FILTER (WHERE c.cancelado_por = 'trabajador')::int AS por_trabajador
-             FROM cancelaciones c
-             JOIN trabajos t ON t.id_trabajo = c.id_trabajo
-            WHERE c.estado = 'aprobada'
-              AND ($1::date IS NULL OR c.fecha_solicitud >= $1::date)
-              AND ($2::date IS NULL OR c.fecha_solicitud <  $2::date + 1)
-            GROUP BY t.id_trabajador
-         ) ca ON ca.id_trabajador = p.id_usuario
-    LEFT JOIN (
-           SELECT id_trabajador,
-                  ROUND(AVG(puntaje), 2)::float AS promedio,
-                  COUNT(*)::int AS total
-             FROM calificaciones
-            WHERE ($1::date IS NULL OR fecha >= $1::date)
-              AND ($2::date IS NULL OR fecha <  $2::date + 1)
-            GROUP BY id_trabajador
-         ) cal ON cal.id_trabajador = p.id_usuario
-        WHERE p.estado_verificacion IN ('aprobado', 'suspendido')
-          AND u.estado <> 'eliminada'
-          AND ($3::int IS NULL OR p.id_usuario = $3::int)
-        ORDER BY trabajos_realizados DESC, ingresos DESC, u.apellidos, u.nombres`,
-      [desde ?? null, hasta ?? null, idTrabajador],
-    );
-
-    // Totales del panel. El promedio general se pondera por cantidad de calificaciones
-    // (un promedio de promedios daría el mismo peso a quien tiene 1 nota y a quien tiene 50).
-    const conNota = filas.filter((f) => f.total_calificaciones > 0);
-    const totalNotas = conNota.reduce((a, f) => a + f.total_calificaciones, 0);
-    const sumaNotas = conNota.reduce((a, f) => a + f.calificacion_promedio * f.total_calificaciones, 0);
-
-    const totales = {
-      trabajos_realizados: filas.reduce((a, f) => a + f.trabajos_realizados, 0),
-      cancelaciones: filas.reduce((a, f) => a + f.cancelaciones, 0),
-      ingresos: redondear(filas.reduce((a, f) => a + f.ingresos, 0)),
-      calificacion_promedio: totalNotas > 0 ? redondear(sumaNotas / totalNotas) : null,
-    };
-
-    return {
-      filtros: { desde: desde ?? null, hasta: hasta ?? null },
-      totales,
-      trabajadores: filas,
-    };
-  }
   // ===============================================================
   // AUXILIARES
   // ===============================================================

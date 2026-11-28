@@ -1,3 +1,4 @@
+
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { Observable } from 'rxjs';
@@ -29,36 +30,122 @@ import { ServiciosSeccion } from './secciones/servicios-seccion';
       <div class="text-muted">Cargando...</div>
     } @else if (sinPerfil()) {
       <!-- ============ Primer paso: crear el perfil ============ -->
-      <div class="card shadow-sm" style="max-width: 36rem"><div class="card-body">
-        <h2 class="h5">Crea tu perfil</h2>
-        <p class="small text-muted">
-          Para ofrecer servicios necesitas un perfil. Después subirás tus documentos y un supervisor
-          lo revisará antes de que puedas enviar ofertas.
-        </p>
-        <form [formGroup]="formDatos" (ngSubmit)="crear()" novalidate>
-          <div class="row g-2">
-            <div class="col-md-6">
-              <label class="form-label small mb-1" for="carnet">Carnet de identidad</label>
-              <input id="carnet" class="form-control form-control-sm" formControlName="carnet_identidad"
-                     [class.is-invalid]="formDatos.controls.carnet_identidad.touched && formDatos.controls.carnet_identidad.invalid" />
-              <div class="invalid-feedback">Entre 5 y 20 caracteres.</div>
+      <div class="card shadow-sm" style="max-width: 36rem">
+        <div class="card-body">
+          <h2 class="h5">Crea tu perfil</h2>
+          <p class="small text-muted">
+            Para ofrecer servicios necesitas un perfil. Después subirás tus documentos y un supervisor
+            lo revisará antes de que puedas enviar ofertas.
+          </p>
+
+          <form [formGroup]="formDatos" (ngSubmit)="crear()" novalidate>
+            <div class="row g-2">
+              <div class="col-md-6">
+                <label class="form-label small mb-1" for="carnet">Carnet de identidad</label>
+                <input
+                  id="carnet"
+                  class="form-control form-control-sm"
+                  formControlName="carnet_identidad"
+                  [class.is-invalid]="formDatos.controls.carnet_identidad.touched && formDatos.controls.carnet_identidad.invalid"
+                />
+                <div class="invalid-feedback">Entre 5 y 20 caracteres.</div>
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label small mb-1" for="anios">Años de experiencia</label>
+                <input
+                  id="anios"
+                  type="number"
+                  min="0"
+                  max="60"
+                  class="form-control form-control-sm"
+                  formControlName="anios_experiencia"
+                />
+              </div>
+
+              <div class="col-12">
+                <label class="form-label small mb-1" for="desc">
+                  Cuéntales a los clientes sobre ti
+                </label>
+                <textarea
+                  id="desc"
+                  rows="3"
+                  class="form-control form-control-sm"
+                  formControlName="descripcion"
+                  maxlength="1000"
+                ></textarea>
+              </div>
             </div>
-            <div class="col-md-6">
-              <label class="form-label small mb-1" for="anios">Años de experiencia</label>
-              <input id="anios" type="number" min="0" max="60" class="form-control form-control-sm" formControlName="anios_experiencia" />
-            </div>
-            <div class="col-12">
-              <label class="form-label small mb-1" for="desc">Cuéntales a los clientes sobre ti</label>
-              <textarea id="desc" rows="3" class="form-control form-control-sm" formControlName="descripcion" maxlength="1000"></textarea>
+
+            @if (error()) {
+              <div class="alert alert-danger py-2 mt-2">{{ error() }}</div>
+            }
+
+            <button class="btn btn-primary mt-3" type="submit" [disabled]="guardando()">
+              Crear perfil
+            </button>
+          </form>
+        </div>
+      </div>
+    } @else if (perfil(); as p) {
+      @if (mensaje()) {
+        <div class="alert alert-success py-2">{{ mensaje() }}</div>
+      }
+
+      @if (error()) {
+        <div class="alert alert-danger py-2">{{ error() }}</div>
+      }
+
+      <!-- ============ Fotografía de perfil ============ -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <h2 class="h5">Fotografía de perfil</h2>
+
+          <div class="d-flex align-items-center gap-3 flex-wrap">
+            @if (p.foto_perfil) {
+              <img
+                [src]="fotoUrl(p.foto_perfil)"
+                alt="Fotografía de perfil"
+                width="120"
+                height="120"
+                style="object-fit: cover; border-radius: 50%;"
+              />
+            } @else {
+              <div
+                class="bg-light border rounded-circle d-flex align-items-center justify-content-center"
+                style="width: 120px; height: 120px;"
+              >
+                <span class="text-muted small">Sin foto</span>
+              </div>
+            }
+
+            <div>
+              <label for="fotoPerfil" class="form-label">
+                Selecciona una fotografía
+              </label>
+
+              <input
+                id="fotoPerfil"
+                type="file"
+                class="form-control form-control-sm"
+                accept="image/jpeg,image/png,image/webp"
+                (change)="seleccionarFoto($event)"
+                [disabled]="subiendoFoto()"
+              />
+
+              <div class="form-text">
+                Formatos JPG, PNG o WebP. Máximo 5 MB.
+              </div>
+
+              @if (subiendoFoto()) {
+                <p class="text-primary small mt-2 mb-0">
+                  Subiendo fotografía...
+                </p>
+              }
             </div>
           </div>
-          @if (error()) { <div class="alert alert-danger py-2 mt-2">{{ error() }}</div> }
-          <button class="btn btn-primary mt-3" type="submit" [disabled]="guardando()">Crear perfil</button>
-        </form>
-      </div></div>
-    } @else if (perfil(); as p) {
-      @if (mensaje()) { <div class="alert alert-success py-2">{{ mensaje() }}</div> }
-      @if (error()) { <div class="alert alert-danger py-2">{{ error() }}</div> }
+        </div>
+      </div>
 
       <!-- ============ Estado de verificación ============ -->
       <div class="card mb-4" [class.border-success]="p.estado_verificacion === 'aprobado'">
@@ -69,18 +156,24 @@ import { ServiciosSeccion } from './secciones/servicios-seccion';
           </div>
 
           @if (p.estado_verificacion === 'aprobado') {
-            <p class="mb-0">Tu perfil está aprobado: apareces en las búsquedas y puedes enviar ofertas.</p>
+            <p class="mb-0">
+              Tu perfil está aprobado: apareces en las búsquedas y puedes enviar ofertas.
+            </p>
           } @else {
             @if (p.motivo_rechazo) {
               <div class="alert alert-warning py-2 small">
                 <strong>Comentario del supervisor:</strong> {{ p.motivo_rechazo }}
               </div>
             }
+
             <p class="small mb-2">Para enviar tu perfil a revisión necesitas completar:</p>
+
             <ul class="list-unstyled small mb-3">
               @for (item of checklist(); track item.texto) {
                 <li>
-                  <span [class]="item.ok ? 'text-success' : 'text-danger'">{{ item.ok ? '✔' : '✘' }}</span>
+                  <span [class]="item.ok ? 'text-success' : 'text-danger'">
+                    {{ item.ok ? '✔' : '✘' }}
+                  </span>
                   {{ item.texto }}
                 </li>
               }
@@ -92,7 +185,12 @@ import { ServiciosSeccion } from './secciones/servicios-seccion';
               </div>
             }
 
-            <button class="btn btn-success" type="button" [disabled]="!completo() || guardando()" (click)="enviarRevision()">
+            <button
+              class="btn btn-success"
+              type="button"
+              [disabled]="!completo() || guardando()"
+              (click)="enviarRevision()"
+            >
               Enviar a revisión
             </button>
           }
@@ -100,58 +198,114 @@ import { ServiciosSeccion } from './secciones/servicios-seccion';
       </div>
 
       <!-- ============ Datos personales ============ -->
-      <div class="card mb-4"><div class="card-body">
-        <h2 class="h5">Datos del perfil</h2>
-        <form [formGroup]="formDatos" (ngSubmit)="guardarDatos()" novalidate>
-          <div class="row g-2">
-            <div class="col-md-6">
-              <label class="form-label small mb-1" for="carnet">Carnet de identidad</label>
-              <input id="carnet" class="form-control form-control-sm" formControlName="carnet_identidad"
-                     [class.is-invalid]="formDatos.controls.carnet_identidad.touched && formDatos.controls.carnet_identidad.invalid" />
-              <div class="invalid-feedback">Entre 5 y 20 caracteres.</div>
+      <div class="card mb-4">
+        <div class="card-body">
+          <h2 class="h5">Datos del perfil</h2>
+
+          <form [formGroup]="formDatos" (ngSubmit)="guardarDatos()" novalidate>
+            <div class="row g-2">
+              <div class="col-md-6">
+                <label class="form-label small mb-1" for="carnet">
+                  Carnet de identidad
+                </label>
+                <input
+                  id="carnet"
+                  class="form-control form-control-sm"
+                  formControlName="carnet_identidad"
+                  [class.is-invalid]="formDatos.controls.carnet_identidad.touched && formDatos.controls.carnet_identidad.invalid"
+                />
+                <div class="invalid-feedback">Entre 5 y 20 caracteres.</div>
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label small mb-1" for="anios">
+                  Años de experiencia
+                </label>
+                <input
+                  id="anios"
+                  type="number"
+                  min="0"
+                  max="60"
+                  class="form-control form-control-sm"
+                  formControlName="anios_experiencia"
+                />
+              </div>
+
+              <div class="col-12">
+                <label class="form-label small mb-1" for="desc">
+                  Cuéntales a los clientes sobre ti
+                </label>
+                <textarea
+                  id="desc"
+                  rows="3"
+                  class="form-control form-control-sm"
+                  formControlName="descripcion"
+                  maxlength="1000"
+                ></textarea>
+              </div>
             </div>
-            <div class="col-md-6">
-              <label class="form-label small mb-1" for="anios">Años de experiencia</label>
-              <input id="anios" type="number" min="0" max="60" class="form-control form-control-sm" formControlName="anios_experiencia" />
-            </div>
-            <div class="col-12">
-              <label class="form-label small mb-1" for="desc">Cuéntales a los clientes sobre ti</label>
-              <textarea id="desc" rows="3" class="form-control form-control-sm" formControlName="descripcion" maxlength="1000"></textarea>
-            </div>
-          </div>
-          @if (p.estado_verificacion === 'aprobado') {
-            <div class="form-text">Si cambias tu carnet, el perfil volverá a revisión.</div>
-          }
-          <button class="btn btn-primary btn-sm mt-3" type="submit" [disabled]="guardando()">Guardar datos</button>
-        </form>
-      </div></div>
+
+            @if (p.estado_verificacion === 'aprobado') {
+              <div class="form-text">
+                Si cambias tu carnet, el perfil volverá a revisión.
+              </div>
+            }
+
+            <button
+              class="btn btn-primary btn-sm mt-3"
+              type="submit"
+              [disabled]="guardando()"
+            >
+              Guardar datos
+            </button>
+          </form>
+        </div>
+      </div>
 
       <app-documentos-seccion [documentos]="p.documentos" (cambio)="cargar()" />
       <app-servicios-seccion [perfil]="p" (cambio)="cargar()" />
       <app-bancarios-seccion (cambio)="cargar()" />
 
       <!-- ============ Pausar la cuenta (RF-07) ============ -->
-      <div class="card border-secondary mb-4"><div class="card-body">
-        <h2 class="h5">Pausar mi cuenta</h2>
-        @if (suspendida()) {
-          <p class="small">Tu cuenta está suspendida: no puedes ofertar, aceptar trabajos ni recibir solicitudes.</p>
-          <button class="btn btn-outline-primary btn-sm" type="button" [disabled]="guardando()" (click)="reactivar()">
-            Reactivar mi cuenta
-          </button>
-          <div class="form-text">
-            Si pausaste tu cuenta por 30 días, podrás reactivarla al terminar ese plazo. Si pasan 60 días sin
-            reactivarla, se elimina.
-          </div>
-        } @else {
-          <p class="small">
-            ¿No puedes trabajar por un tiempo? Pausa tu cuenta 30 días: tu perfil aparecerá como «no disponible».
-            Antes debes cumplir o cancelar los trabajos que tengas aceptados.
-          </p>
-          <button class="btn btn-outline-secondary btn-sm" type="button" [disabled]="guardando()" (click)="pausar()">
-            Pausar mi cuenta 30 días
-          </button>
-        }
-      </div></div>
+      <div class="card border-secondary mb-4">
+        <div class="card-body">
+          <h2 class="h5">Pausar mi cuenta</h2>
+
+          @if (suspendida()) {
+            <p class="small">
+              Tu cuenta está suspendida: no puedes ofertar, aceptar trabajos ni recibir solicitudes.
+            </p>
+
+            <button
+              class="btn btn-outline-primary btn-sm"
+              type="button"
+              [disabled]="guardando()"
+              (click)="reactivar()"
+            >
+              Reactivar mi cuenta
+            </button>
+
+            <div class="form-text">
+              Si pausaste tu cuenta por 30 días, podrás reactivarla al terminar ese plazo.
+              Si pasan 60 días sin reactivarla, se elimina.
+            </div>
+          } @else {
+            <p class="small">
+              ¿No puedes trabajar por un tiempo? Pausa tu cuenta 30 días: tu perfil aparecerá como
+              «no disponible». Antes debes cumplir o cancelar los trabajos que tengas aceptados.
+            </p>
+
+            <button
+              class="btn btn-outline-secondary btn-sm"
+              type="button"
+              [disabled]="guardando()"
+              (click)="pausar()"
+            >
+              Pausar mi cuenta 30 días
+            </button>
+          }
+        </div>
+      </div>
     }
   `,
 })
@@ -165,6 +319,7 @@ export class MiPerfil {
   sinPerfil = signal(false);
   cargando = signal(true);
   guardando = signal(false);
+  subiendoFoto = signal(false);
   error = signal<string | null>(null);
   mensaje = signal<string | null>(null);
   faltantes = signal<string[]>([]);
@@ -175,7 +330,9 @@ export class MiPerfil {
   checklist = computed(() => {
     const p = this.perfil();
     if (!p) return [];
+
     const tipos = p.documentos.map((d) => d.tipo);
+
     return [
       { texto: 'Carnet de identidad (documento)', ok: tipos.includes('carnet') },
       { texto: 'Certificado de antecedentes (documento)', ok: tipos.includes('antecedentes') },
@@ -184,6 +341,7 @@ export class MiPerfil {
       { texto: 'Datos bancarios', ok: p.tiene_datos_bancarios },
     ];
   });
+
   completo = computed(() => this.checklist().every((i) => i.ok));
 
   formDatos = this.fb.nonNullable.group({
@@ -201,18 +359,70 @@ export class MiPerfil {
       next: (p) => {
         this.perfil.set(p);
         this.sinPerfil.set(false);
+
         this.formDatos.patchValue({
           carnet_identidad: p.carnet_identidad,
           anios_experiencia: p.anios_experiencia,
           descripcion: p.descripcion ?? '',
         });
+
         this.cargando.set(false);
       },
       error: (e: HttpErrorResponse) => {
         // 404 = todavía no creó su perfil: se le muestra el formulario de creación
         if (e.status === 404) this.sinPerfil.set(true);
         else this.error.set(mensajeDeError(e));
+
         this.cargando.set(false);
+      },
+    });
+  }
+
+  // Construye la dirección completa de la fotografía
+  fotoUrl(ruta: string | null): string {
+    return this.api.fotoUrl(ruta);
+  }
+
+  // Seleccionar y subir fotografía
+  seleccionarFoto(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const foto = input.files?.[0];
+
+    if (!foto) return;
+
+    const tiposPermitidos = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+    ];
+
+    if (!tiposPermitidos.includes(foto.type)) {
+      this.error.set('Selecciona una imagen JPG, PNG o WebP.');
+      input.value = '';
+      return;
+    }
+
+    if (foto.size > 5 * 1024 * 1024) {
+      this.error.set('La imagen no puede superar los 5 MB.');
+      input.value = '';
+      return;
+    }
+
+    this.error.set(null);
+    this.mensaje.set(null);
+    this.subiendoFoto.set(true);
+
+    this.api.subirFotoPerfil(foto).subscribe({
+      next: () => {
+        this.mensaje.set('Fotografía actualizada correctamente.');
+        this.subiendoFoto.set(false);
+        input.value = '';
+        this.cargar();
+      },
+      error: (e: HttpErrorResponse) => {
+        this.error.set(mensajeDeError(e));
+        this.subiendoFoto.set(false);
+        input.value = '';
       },
     });
   }
@@ -222,7 +432,11 @@ export class MiPerfil {
       this.formDatos.markAllAsTouched();
       return;
     }
-    this.ejecutar(this.api.crear(this.datos()), 'Perfil creado. Ahora sube tus documentos y completa tus datos.');
+
+    this.ejecutar(
+      this.api.crear(this.datos()),
+      'Perfil creado. Ahora sube tus documentos y completa tus datos.',
+    );
   }
 
   guardarDatos() {
@@ -230,6 +444,7 @@ export class MiPerfil {
       this.formDatos.markAllAsTouched();
       return;
     }
+
     this.ejecutar(this.api.actualizar(this.datos()), 'Datos actualizados.');
   }
 
@@ -238,6 +453,7 @@ export class MiPerfil {
     this.guardando.set(true);
     this.error.set(null);
     this.mensaje.set(null);
+
     this.api.enviarRevision().subscribe({
       next: (r) => {
         this.mensaje.set(r.mensaje);
@@ -247,6 +463,7 @@ export class MiPerfil {
       error: (e: HttpErrorResponse) => {
         const lista = e.error?.faltantes;
         if (Array.isArray(lista)) this.faltantes.set(lista);
+
         this.error.set(mensajeDeError(e));
         this.guardando.set(false);
       },
@@ -254,9 +471,13 @@ export class MiPerfil {
   }
 
   pausar() {
-    if (!confirm('¿Pausar tu cuenta por 30 días? No podrás ofertar ni recibir solicitudes en ese tiempo.')) return;
+    if (!confirm('¿Pausar tu cuenta por 30 días? No podrás ofertar ni recibir solicitudes en ese tiempo.')) {
+      return;
+    }
+
     this.guardando.set(true);
     this.error.set(null);
+
     this.admin.suspenderMiCuenta().subscribe({
       next: () => {
         this.auth.actualizarUsuarioLocal({ estado: 'suspendida' });
@@ -273,6 +494,7 @@ export class MiPerfil {
   reactivar() {
     this.guardando.set(true);
     this.error.set(null);
+
     this.admin.reactivarMiCuenta().subscribe({
       next: (r) => {
         this.auth.actualizarUsuarioLocal({ estado: 'activa' });
@@ -288,6 +510,7 @@ export class MiPerfil {
 
   private datos() {
     const v = this.formDatos.getRawValue();
+
     return {
       carnet_identidad: v.carnet_identidad.trim(),
       anios_experiencia: Number(v.anios_experiencia) || 0,
@@ -299,6 +522,7 @@ export class MiPerfil {
     this.guardando.set(true);
     this.error.set(null);
     this.mensaje.set(null);
+
     peticion.subscribe({
       next: () => {
         this.mensaje.set(exito);

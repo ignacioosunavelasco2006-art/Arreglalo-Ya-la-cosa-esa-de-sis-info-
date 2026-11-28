@@ -16,6 +16,16 @@ export class Trabajo {
 
   @Column({ type: 'int' })
   id_trabajador: number;
+    @Column({ type: 'numeric', precision: 10, scale: 2 })
+  precio_base: number;
+
+  @Column({
+    type: 'numeric',
+    precision: 10,
+    scale: 2,
+    default: 0,
+  })
+  recargo_urgencia: number;
 
   @Column({ type: 'numeric', precision: 10, scale: 2 })
   precio_final: number;
